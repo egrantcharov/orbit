@@ -54,7 +54,19 @@ export function SyncControl({
         `Synced ${body.messagesScanned ?? 0} messages, ${body.contactsUpserted ?? 0} contacts`,
         { id: t, icon: <CheckCircle2 className="h-4 w-4" /> },
       );
-      startTransition(() => router.refresh());
+      // Fire-and-forget: classify any heuristic-stumped contacts via Claude.
+      // Refresh router state once it returns; ignore errors silently — the
+      // app stays usable even if classification is unavailable (no API key,
+      // rate limit, etc.).
+      void fetch("/api/classify", { method: "POST" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((info) => {
+          if (info?.classified > 0) {
+            toast.success(`Classified ${info.classified} contacts via AI`);
+          }
+          startTransition(() => router.refresh());
+        })
+        .catch(() => startTransition(() => router.refresh()));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Sync failed", {
         id: t,
