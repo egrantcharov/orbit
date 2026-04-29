@@ -12,6 +12,7 @@ import {
   NoContactsEmpty,
 } from "@/components/app/EmptyState";
 import { Suggestions } from "@/components/app/Suggestions";
+import { AskOrbit } from "@/components/app/AskOrbit";
 
 export const dynamic = "force-dynamic";
 
@@ -127,6 +128,8 @@ export default async function AppHome({
         topContactName={top?.display_name ?? top?.email ?? null}
         topContactCount={top?.message_count ?? 0}
       />
+
+      <AskOrbit />
 
       <Suggestions userId={userId} />
 
