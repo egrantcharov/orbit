@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { Search, ArrowUpDown } from "lucide-react";
+import { Search, ArrowUpDown, Pin } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -15,8 +15,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { ContactAvatar } from "@/components/ui/contact-avatar";
+import { PinButton } from "@/components/app/PinButton";
+import { ClassifyMenu } from "@/components/app/ClassifyMenu";
 import { formatRelativeTime } from "@/lib/format";
-import { emailDomain } from "@/lib/utils";
+import { cn, emailDomain } from "@/lib/utils";
+import type { ContactKind } from "@/lib/types/database";
 
 export type ContactRow = {
   id: string;
@@ -24,6 +27,8 @@ export type ContactRow = {
   display_name: string | null;
   last_interaction_at: string | null;
   message_count: number;
+  kind: ContactKind;
+  is_pinned: boolean;
 };
 
 type Sort = "recent" | "count" | "name" | "name_desc";
@@ -35,7 +40,31 @@ const SORT_LABELS: Record<Sort, string> = {
   name_desc: "Name (Z → A)",
 };
 
+const DRIFTING_DAYS = 30;
+const ACTIVE_DAYS = 7;
+const HIGH_VOLUME_THRESHOLD = 10;
+
+type Chip = "drifting" | "active" | "high_volume";
+const CHIPS: Array<{ key: Chip; label: string }> = [
+  { key: "drifting", label: `Drifting (${DRIFTING_DAYS}d+)` },
+  { key: "active", label: `Active (${ACTIVE_DAYS}d)` },
+  { key: "high_volume", label: `High volume (${HIGH_VOLUME_THRESHOLD}+)` },
+];
+
+function passesChips(c: ContactRow, chips: Set<Chip>): boolean {
+  if (chips.size === 0) return true;
+  const now = Date.now();
+  const ts = c.last_interaction_at ? new Date(c.last_interaction_at).getTime() : 0;
+  const ageDays = ts ? (now - ts) / 86_400_000 : Infinity;
+  if (chips.has("drifting") && !(ageDays >= DRIFTING_DAYS)) return false;
+  if (chips.has("active") && !(ageDays <= ACTIVE_DAYS)) return false;
+  if (chips.has("high_volume") && c.message_count < HIGH_VOLUME_THRESHOLD) return false;
+  return true;
+}
+
 function sortFn(a: ContactRow, b: ContactRow, sort: Sort): number {
+  // Pinned-first across all sorts.
+  if (a.is_pinned !== b.is_pinned) return a.is_pinned ? -1 : 1;
   switch (sort) {
     case "recent": {
       const ta = a.last_interaction_at ? new Date(a.last_interaction_at).getTime() : 0;
@@ -54,18 +83,32 @@ function sortFn(a: ContactRow, b: ContactRow, sort: Sort): number {
 export function ContactList({ contacts }: { contacts: ContactRow[] }) {
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<Sort>("recent");
+  const [chips, setChips] = useState<Set<Chip>>(new Set());
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const base = q
-      ? contacts.filter(
-          (c) =>
-            c.email.toLowerCase().includes(q) ||
-            (c.display_name ?? "").toLowerCase().includes(q),
-        )
-      : contacts;
-    return [...base].sort((a, b) => sortFn(a, b, sort));
-  }, [contacts, query, sort]);
+    return contacts
+      .filter((c) => {
+        if (
+          q &&
+          !c.email.toLowerCase().includes(q) &&
+          !(c.display_name ?? "").toLowerCase().includes(q)
+        ) {
+          return false;
+        }
+        return passesChips(c, chips);
+      })
+      .sort((a, b) => sortFn(a, b, sort));
+  }, [contacts, query, sort, chips]);
+
+  function toggleChip(c: Chip) {
+    setChips((prev) => {
+      const next = new Set(prev);
+      if (next.has(c)) next.delete(c);
+      else next.add(c);
+      return next;
+    });
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -102,48 +145,94 @@ export function ContactList({ contacts }: { contacts: ContactRow[] }) {
         </DropdownMenu>
       </div>
 
+      <div className="flex items-center gap-2 flex-wrap">
+        {CHIPS.map((chip) => {
+          const active = chips.has(chip.key);
+          return (
+            <button
+              key={chip.key}
+              type="button"
+              onClick={() => toggleChip(chip.key)}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                active
+                  ? "bg-foreground text-background border-foreground"
+                  : "bg-background text-muted-foreground border-border hover:bg-accent hover:text-foreground",
+              )}
+            >
+              {chip.label}
+            </button>
+          );
+        })}
+        {chips.size > 0 && (
+          <button
+            type="button"
+            onClick={() => setChips(new Set())}
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Clear
+          </button>
+        )}
+      </div>
+
       {filtered.length === 0 ? (
         <div className="rounded-xl border bg-card px-6 py-12 text-center text-sm text-muted-foreground">
           {query
             ? `No contacts match "${query}".`
-            : "No contacts yet — try syncing again."}
+            : "No contacts match these filters."}
         </div>
       ) : (
         <ul className="rounded-xl border bg-card divide-y">
           {filtered.map((c) => (
-            <li key={c.id}>
-              <Link
-                href={`/app/contact/${c.id}`}
-                className="flex items-center gap-4 px-4 py-3 hover:bg-accent/50 transition-colors"
-              >
-                <ContactAvatar
-                  email={c.email}
-                  displayName={c.display_name}
-                  size="md"
-                />
-                <div className="flex flex-1 flex-col min-w-0">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-sm font-medium truncate">
-                      {c.display_name ?? c.email}
-                    </span>
-                    <Badge variant="muted" className="hidden sm:inline-flex font-normal">
-                      {emailDomain(c.email)}
-                    </Badge>
+            <li key={c.id} className="group">
+              <div className="flex items-center gap-2 px-4 py-3 hover:bg-accent/50 transition-colors">
+                <Link
+                  href={`/app/contact/${c.id}`}
+                  className="flex flex-1 items-center gap-4 min-w-0"
+                >
+                  <ContactAvatar
+                    email={c.email}
+                    displayName={c.display_name}
+                    size="md"
+                  />
+                  <div className="flex flex-1 flex-col min-w-0">
+                    <div className="flex items-center gap-2 min-w-0">
+                      {c.is_pinned && (
+                        <Pin className="h-3 w-3 shrink-0 text-amber-600 dark:text-amber-400 fill-current" />
+                      )}
+                      <span className="text-sm font-medium truncate">
+                        {c.display_name ?? c.email}
+                      </span>
+                      <Badge
+                        variant="muted"
+                        className="hidden sm:inline-flex font-normal"
+                      >
+                        {emailDomain(c.email)}
+                      </Badge>
+                    </div>
+                    {c.display_name && (
+                      <span className="text-xs text-muted-foreground truncate">
+                        {c.email}
+                      </span>
+                    )}
                   </div>
-                  {c.display_name && (
-                    <span className="text-xs text-muted-foreground truncate">
-                      {c.email}
+                  <div className="flex flex-col items-end gap-0.5 text-xs text-muted-foreground shrink-0 mr-2">
+                    <span>{formatRelativeTime(c.last_interaction_at)}</span>
+                    <span>
+                      {c.message_count.toLocaleString()}{" "}
+                      {c.message_count === 1 ? "msg" : "msgs"}
                     </span>
-                  )}
+                  </div>
+                </Link>
+                <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                  <PinButton contactId={c.id} pinned={c.is_pinned} size="sm" />
+                  <ClassifyMenu
+                    contactId={c.id}
+                    currentKind={c.kind}
+                    size="sm"
+                  />
                 </div>
-                <div className="flex flex-col items-end gap-0.5 text-xs text-muted-foreground shrink-0">
-                  <span>{formatRelativeTime(c.last_interaction_at)}</span>
-                  <span>
-                    {c.message_count.toLocaleString()}{" "}
-                    {c.message_count === 1 ? "msg" : "msgs"}
-                  </span>
-                </div>
-              </Link>
+              </div>
             </li>
           ))}
         </ul>

@@ -2,9 +2,20 @@ import { auth } from "@clerk/nextjs/server";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { StatsBar } from "@/components/app/StatsBar";
 import { ContactList, type ContactRow } from "@/components/app/ContactList";
-import { ConnectGoogleEmpty, NoContactsEmpty } from "@/components/app/EmptyState";
+import {
+  ContactTabs,
+  type ContactTab,
+  isContactTab,
+} from "@/components/app/ContactTabs";
+import {
+  ConnectGoogleEmpty,
+  NoContactsEmpty,
+} from "@/components/app/EmptyState";
+import { Suggestions } from "@/components/app/Suggestions";
 
 export const dynamic = "force-dynamic";
+
+const PROFESSIONAL_KINDS = ["person", "newsletter"];
 
 export default async function AppHome({
   searchParams,
@@ -12,32 +23,53 @@ export default async function AppHome({
   searchParams: Promise<{
     google_error?: string;
     connected?: string;
+    tab?: string;
   }>;
 }) {
   const { userId } = await auth();
   if (!userId) return null;
 
   const params = await searchParams;
+  const tab: ContactTab = isContactTab(params.tab) ? params.tab : "people";
   const supabase = createSupabaseServiceClient();
 
-  const [{ data: connection }, { data: contacts }, { count: threadCount }] =
-    await Promise.all([
-      supabase
-        .from("google_connections")
-        .select("google_email, last_sync_at")
-        .eq("clerk_user_id", userId)
-        .maybeSingle(),
-      supabase
-        .from("contacts")
-        .select("id, email, display_name, last_interaction_at, message_count")
-        .eq("clerk_user_id", userId)
-        .order("last_interaction_at", { ascending: false, nullsFirst: false })
-        .limit(500),
-      supabase
-        .from("threads")
-        .select("id", { count: "exact", head: true })
-        .eq("clerk_user_id", userId),
-    ]);
+  const [
+    { data: connection },
+    { count: peopleCount },
+    { count: newslettersCount },
+    { count: allCount },
+    { count: pinnedCount },
+    { count: threadCount },
+  ] = await Promise.all([
+    supabase
+      .from("google_connections")
+      .select("google_email, last_sync_at")
+      .eq("clerk_user_id", userId)
+      .maybeSingle(),
+    supabase
+      .from("contacts")
+      .select("*", { count: "exact", head: true })
+      .eq("clerk_user_id", userId)
+      .eq("kind", "person"),
+    supabase
+      .from("contacts")
+      .select("*", { count: "exact", head: true })
+      .eq("clerk_user_id", userId)
+      .eq("kind", "newsletter"),
+    supabase
+      .from("contacts")
+      .select("*", { count: "exact", head: true })
+      .eq("clerk_user_id", userId),
+    supabase
+      .from("contacts")
+      .select("*", { count: "exact", head: true })
+      .eq("clerk_user_id", userId)
+      .eq("is_pinned", true),
+    supabase
+      .from("threads")
+      .select("*", { count: "exact", head: true })
+      .eq("clerk_user_id", userId),
+  ]);
 
   if (!connection) {
     return (
@@ -47,9 +79,31 @@ export default async function AppHome({
     );
   }
 
+  // Build the per-tab query.
+  let q = supabase
+    .from("contacts")
+    .select(
+      "id, email, display_name, last_interaction_at, message_count, kind, is_pinned",
+    )
+    .eq("clerk_user_id", userId)
+    .order("is_pinned", { ascending: false })
+    .order("last_interaction_at", { ascending: false, nullsFirst: false })
+    .limit(500);
+
+  if (tab === "people") q = q.eq("kind", "person");
+  else if (tab === "newsletters") q = q.eq("kind", "newsletter");
+  else if (tab === "pinned") q = q.eq("is_pinned", true);
+
+  const { data: contacts } = await q;
   const contactRows: ContactRow[] = contacts ?? [];
+
   const top = contactRows.reduce<ContactRow | null>(
-    (a, c) => (a && a.message_count >= c.message_count ? a : c),
+    (a, c) =>
+      a && a.message_count >= c.message_count && PROFESSIONAL_KINDS.includes(a.kind)
+        ? a
+        : PROFESSIONAL_KINDS.includes(c.kind)
+          ? c
+          : a,
     null,
   );
 
@@ -67,12 +121,26 @@ export default async function AppHome({
       </div>
 
       <StatsBar
-        totalContacts={contactRows.length}
+        totalContacts={peopleCount ?? 0}
         totalThreads={threadCount ?? 0}
         lastSyncAt={connection.last_sync_at}
         topContactName={top?.display_name ?? top?.email ?? null}
         topContactCount={top?.message_count ?? 0}
       />
+
+      <Suggestions userId={userId} />
+
+      <div>
+        <ContactTabs
+          active={tab}
+          counts={{
+            people: peopleCount ?? 0,
+            newsletters: newslettersCount ?? 0,
+            all: allCount ?? 0,
+            pinned: pinnedCount ?? 0,
+          }}
+        />
+      </div>
 
       {contactRows.length === 0 ? (
         <NoContactsEmpty />

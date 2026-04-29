@@ -16,6 +16,8 @@ import { ContactAvatar } from "@/components/ui/contact-avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { PinButton } from "@/components/app/PinButton";
+import { ClassifyMenu } from "@/components/app/ClassifyMenu";
 
 export const dynamic = "force-dynamic";
 
@@ -41,7 +43,7 @@ export default async function ContactDetail({
   const { data: contact } = await supabase
     .from("contacts")
     .select(
-      "id, email, display_name, last_interaction_at, message_count, created_at",
+      "id, email, display_name, last_interaction_at, message_count, created_at, kind, kind_reason, is_pinned",
     )
     .eq("clerk_user_id", userId)
     .eq("id", id)
@@ -132,7 +134,12 @@ export default async function ContactDetail({
               )}
             </div>
           </div>
-          <div className="hidden sm:flex">
+          <div className="hidden sm:flex items-center gap-2">
+            <PinButton contactId={contact.id} pinned={contact.is_pinned} />
+            <ClassifyMenu
+              contactId={contact.id}
+              currentKind={contact.kind}
+            />
             <Button asChild variant="outline">
               <a href={`mailto:${contact.email}`}>
                 <Mail />
