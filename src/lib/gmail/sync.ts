@@ -2,7 +2,8 @@ import { google, gmail_v1 } from "googleapis";
 import { createOAuth2Client } from "@/lib/google/oauth";
 import { decryptToken, encryptToken } from "@/lib/crypto";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
-import type { Database } from "@/lib/types/database";
+import type { ContactKind, Database } from "@/lib/types/database";
+import { heuristicClassify } from "@/lib/classify/heuristics";
 
 const MAX_MESSAGES = 500;
 const RECENT_DAYS = 30;
@@ -223,14 +224,72 @@ export async function syncRecentMessages(clerkUserId: string) {
     }
   }
 
-  // Bulk upsert contacts.
-  const contactRows = Array.from(contactByEmail.values()).map((c) => ({
-    clerk_user_id: clerkUserId,
-    email: c.email,
-    display_name: c.displayName,
-    last_interaction_at: c.lastSeen.toISOString(),
-    message_count: c.count,
-  }));
+  // Pre-read existing contacts so we can: preserve user-locked kind/reason
+  // verbatim; preserve LLM-assigned kinds (kind != 'unknown') that the
+  // heuristic doesn't have an opinion on; and only overwrite kinds when the
+  // heuristic now has a stronger opinion.
+  const emails = Array.from(contactByEmail.keys());
+  const existingByEmail = new Map<
+    string,
+    {
+      kind: ContactKind;
+      kind_reason: string | null;
+      kind_locked: boolean;
+    }
+  >();
+  if (emails.length > 0) {
+    const { data: existing } = await supabase
+      .from("contacts")
+      .select("email, kind, kind_reason, kind_locked")
+      .eq("clerk_user_id", clerkUserId)
+      .in("email", emails);
+    for (const row of existing ?? []) {
+      existingByEmail.set(row.email, {
+        kind: row.kind,
+        kind_reason: row.kind_reason,
+        kind_locked: row.kind_locked,
+      });
+    }
+  }
+
+  // Bulk upsert contacts (with heuristic classification).
+  const contactRows = Array.from(contactByEmail.values()).map((c) => {
+    const ex = existingByEmail.get(c.email);
+    const heuristic = heuristicClassify({
+      email: c.email,
+      displayName: c.displayName,
+      messageCount: c.count,
+    });
+
+    let kind: ContactKind;
+    let kind_reason: string | null;
+    if (ex?.kind_locked) {
+      // User override wins forever — never reclassify.
+      kind = ex.kind;
+      kind_reason = ex.kind_reason;
+    } else if (heuristic) {
+      kind = heuristic.kind;
+      kind_reason = heuristic.reason;
+    } else if (ex && ex.kind !== "unknown") {
+      // Heuristic has no opinion but the LLM (or a previous heuristic
+      // version) already classified this contact — keep that.
+      kind = ex.kind;
+      kind_reason = ex.kind_reason;
+    } else {
+      kind = "unknown";
+      kind_reason = null;
+    }
+
+    return {
+      clerk_user_id: clerkUserId,
+      email: c.email,
+      display_name: c.displayName,
+      last_interaction_at: c.lastSeen.toISOString(),
+      message_count: c.count,
+      kind,
+      kind_reason,
+    };
+  });
 
   if (contactRows.length > 0) {
     const { error: contactErr } = await supabase
