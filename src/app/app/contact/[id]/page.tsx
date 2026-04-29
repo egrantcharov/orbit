@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PinButton } from "@/components/app/PinButton";
 import { ClassifyMenu } from "@/components/app/ClassifyMenu";
+import { SummaryCard } from "@/components/app/SummaryCard";
 
 export const dynamic = "force-dynamic";
 
@@ -43,7 +44,7 @@ export default async function ContactDetail({
   const { data: contact } = await supabase
     .from("contacts")
     .select(
-      "id, email, display_name, last_interaction_at, message_count, created_at, kind, kind_reason, is_pinned",
+      "id, email, display_name, last_interaction_at, message_count, created_at, kind, kind_reason, is_pinned, ai_summary, ai_summary_at",
     )
     .eq("clerk_user_id", userId)
     .eq("id", id)
@@ -169,6 +170,13 @@ export default async function ContactDetail({
           </div>
         )}
       </Card>
+
+      <SummaryCard
+        contactId={contact.id}
+        isPerson={contact.kind === "person"}
+        initialSummary={contact.ai_summary}
+        initialSummaryAt={contact.ai_summary_at}
+      />
 
       <section className="flex flex-col gap-3">
         <div className="flex items-baseline justify-between">
