@@ -11,7 +11,10 @@ export async function GET() {
   const client = createOAuth2Client();
   const url = client.generateAuthUrl({
     access_type: "offline",
-    prompt: "consent",
+    // `select_account` forces Google's account picker even when the user is
+    // already signed in to a Google account in this browser; `consent` then
+    // forces the scope grant so we always get a refresh token back.
+    prompt: "select_account consent",
     include_granted_scopes: true,
     scope: GOOGLE_SCOPES,
     state: userId,
