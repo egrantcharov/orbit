@@ -4,8 +4,9 @@ import { decryptToken, encryptToken } from "@/lib/crypto";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import type { Database } from "@/lib/types/database";
 
-const RECENT_QUERY = "newer_than:30d";
 const MAX_MESSAGES = 500;
+const RECENT_DAYS = 30;
+const RECENT_CUTOFF_MS = RECENT_DAYS * 24 * 60 * 60 * 1000;
 
 type ParsedAddress = { name: string | null; email: string };
 
@@ -105,9 +106,11 @@ export async function syncRecentMessages(clerkUserId: string) {
   const gmail = google.gmail({ version: "v1", auth: oauth2 });
   const selfEmail = googleEmail.toLowerCase();
 
+  // The gmail.metadata scope rejects the `q` parameter, so we list the
+  // newest MAX_MESSAGES across the account (newest first by default) and
+  // filter to the last RECENT_DAYS in the processing loop below.
   const list = await gmail.users.messages.list({
     userId: "me",
-    q: RECENT_QUERY,
     maxResults: MAX_MESSAGES,
   });
   const messageIds = (list.data.messages ?? []).map((m) => m.id!).filter(Boolean);
@@ -158,10 +161,12 @@ export async function syncRecentMessages(clerkUserId: string) {
   };
   const threadById = new Map<string, ThreadAgg>();
 
+  const cutoffMs = Date.now() - RECENT_CUTOFF_MS;
   for (const msg of messages) {
     if (!msg.threadId || !msg.id) continue;
     const dateRaw = headerValue(msg, "Date");
     const date = dateRaw ? new Date(dateRaw) : new Date();
+    if (date.getTime() < cutoffMs) continue;
     const subject = headerValue(msg, "Subject") ?? null;
     const snippet = msg.snippet ?? null;
 
