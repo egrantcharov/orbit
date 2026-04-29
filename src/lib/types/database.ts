@@ -3,6 +3,38 @@
  * Run `supabase gen types typescript` once the project is linked to autogen.
  */
 
+export type ContactKind =
+  | "person"
+  | "newsletter"
+  | "automated"
+  | "noreply"
+  | "spam"
+  | "unknown";
+
+export const CONTACT_KINDS: ContactKind[] = [
+  "person",
+  "newsletter",
+  "automated",
+  "noreply",
+  "spam",
+  "unknown",
+];
+
+export type BookmarkKind =
+  | "github"
+  | "newsletter"
+  | "article"
+  | "tool"
+  | "other";
+
+export const BOOKMARK_KINDS: BookmarkKind[] = [
+  "github",
+  "newsletter",
+  "article",
+  "tool",
+  "other",
+];
+
 export type Database = {
   public: {
     Tables: {
@@ -55,6 +87,12 @@ export type Database = {
           last_interaction_at: string | null;
           message_count: number;
           created_at: string;
+          kind: ContactKind;
+          kind_reason: string | null;
+          kind_locked: boolean;
+          is_pinned: boolean;
+          ai_summary: string | null;
+          ai_summary_at: string | null;
         };
         Insert: {
           id?: string;
@@ -63,6 +101,12 @@ export type Database = {
           display_name?: string | null;
           last_interaction_at?: string | null;
           message_count?: number;
+          kind?: ContactKind;
+          kind_reason?: string | null;
+          kind_locked?: boolean;
+          is_pinned?: boolean;
+          ai_summary?: string | null;
+          ai_summary_at?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["contacts"]["Insert"]>;
         Relationships: [];
@@ -102,6 +146,50 @@ export type Database = {
         Update: Partial<
           Database["public"]["Tables"]["thread_participants"]["Insert"]
         >;
+        Relationships: [];
+      };
+      bookmarks: {
+        Row: {
+          id: string;
+          clerk_user_id: string;
+          url: string;
+          title: string | null;
+          description: string | null;
+          kind: BookmarkKind;
+          tags: string[];
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          clerk_user_id: string;
+          url: string;
+          title?: string | null;
+          description?: string | null;
+          kind?: BookmarkKind;
+          tags?: string[];
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["bookmarks"]["Insert"]>;
+        Relationships: [];
+      };
+      digests: {
+        Row: {
+          clerk_user_id: string;
+          week_start: string;
+          body: string;
+          contacts_in: number;
+          threads_in: number;
+          created_at: string;
+        };
+        Insert: {
+          clerk_user_id: string;
+          week_start: string;
+          body: string;
+          contacts_in?: number;
+          threads_in?: number;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["digests"]["Insert"]>;
         Relationships: [];
       };
     };
