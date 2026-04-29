@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -14,8 +16,13 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Orbit",
-  description: "Stay close to the people and ideas that matter.",
+  title: {
+    default: "Orbit",
+    template: "%s · Orbit",
+  },
+  description:
+    "Stay close to the people and ideas that matter — without remembering to do the work.",
+  applicationName: "Orbit",
 };
 
 export default function RootLayout({
@@ -24,13 +31,28 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <ClerkProvider>
+    <ClerkProvider
+      appearance={{
+        variables: {
+          colorPrimary: "hsl(240 6% 10%)",
+          borderRadius: "0.625rem",
+          fontFamily: "var(--font-geist-sans)",
+        },
+        elements: {
+          card: "shadow-none border border-border",
+          headerTitle: "tracking-tight",
+        },
+      }}
+    >
       <html
         lang="en"
         className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
       >
-        <body className="min-h-full flex flex-col bg-zinc-50 text-zinc-900 dark:bg-black dark:text-zinc-50">
-          {children}
+        <body className="min-h-full flex flex-col bg-background text-foreground">
+          <TooltipProvider delayDuration={120}>
+            {children}
+            <Toaster />
+          </TooltipProvider>
         </body>
       </html>
     </ClerkProvider>
