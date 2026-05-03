@@ -1,13 +1,13 @@
 import { google, gmail_v1 } from "googleapis";
-import { createOAuth2Client } from "@/lib/google/oauth";
-import { decryptToken, encryptToken } from "@/lib/crypto";
+import { getAuthClient } from "@/lib/google/auth";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
-import type { ContactKind, Database } from "@/lib/types/database";
+import type { ContactKind } from "@/lib/types/database";
 import { heuristicClassify } from "@/lib/classify/heuristics";
 
 const MAX_MESSAGES = 500;
 const RECENT_DAYS = 30;
 const RECENT_CUTOFF_MS = RECENT_DAYS * 24 * 60 * 60 * 1000;
+const BODY_EXCERPT_MAX = 2000;
 
 type ParsedAddress = { name: string | null; email: string };
 
@@ -48,49 +48,6 @@ function parseSingle(piece: string): ParsedAddress | null {
   return null;
 }
 
-async function getAuthClient(clerkUserId: string) {
-  const supabase = createSupabaseServiceClient();
-  const { data, error } = await supabase
-    .from("google_connections")
-    .select("*")
-    .eq("clerk_user_id", clerkUserId)
-    .single();
-  if (error || !data) {
-    throw new Error("No Google connection for user");
-  }
-
-  const oauth2 = createOAuth2Client();
-  const refreshToken = decryptToken(data.refresh_token_encrypted);
-  oauth2.setCredentials({
-    refresh_token: refreshToken,
-    access_token: data.access_token ?? undefined,
-    expiry_date: data.access_token_expires_at
-      ? new Date(data.access_token_expires_at).getTime()
-      : undefined,
-  });
-
-  // Persist any refreshed credentials so we don't pay the refresh cost on
-  // every call.
-  oauth2.on("tokens", async (tokens) => {
-    const update: Database["public"]["Tables"]["google_connections"]["Update"] = {};
-    if (tokens.access_token) update.access_token = tokens.access_token;
-    if (tokens.expiry_date) {
-      update.access_token_expires_at = new Date(tokens.expiry_date).toISOString();
-    }
-    if (tokens.refresh_token) {
-      update.refresh_token_encrypted = encryptToken(tokens.refresh_token);
-    }
-    if (Object.keys(update).length > 0) {
-      await supabase
-        .from("google_connections")
-        .update(update)
-        .eq("clerk_user_id", clerkUserId);
-    }
-  });
-
-  return { oauth2, googleEmail: data.google_email };
-}
-
 function headerValue(
   msg: gmail_v1.Schema$Message,
   name: string,
@@ -101,15 +58,68 @@ function headerValue(
   return h?.value ?? undefined;
 }
 
+function decodeBase64Url(data: string): string {
+  const buf = Buffer.from(data.replace(/-/g, "+").replace(/_/g, "/"), "base64");
+  return buf.toString("utf8");
+}
+
+function htmlToText(html: string): string {
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<\/(p|div|li|tr|td|h[1-6])>/gi, "\n")
+    .replace(/<br\s*\/?>(\s*)/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+// Walk the MIME tree looking for the best body candidate. Prefer text/plain;
+// fall back to a stripped text/html. Returns null if nothing usable found.
+function extractBodyText(payload: gmail_v1.Schema$MessagePart | undefined): string | null {
+  if (!payload) return null;
+
+  const candidates: { mime: string; data: string }[] = [];
+  const walk = (part: gmail_v1.Schema$MessagePart) => {
+    const mime = (part.mimeType ?? "").toLowerCase();
+    const data = part.body?.data;
+    if (data && (mime === "text/plain" || mime === "text/html")) {
+      candidates.push({ mime, data });
+    }
+    if (part.parts) {
+      for (const child of part.parts) walk(child);
+    }
+  };
+  walk(payload);
+
+  const plain = candidates.find((c) => c.mime === "text/plain");
+  if (plain) {
+    const text = decodeBase64Url(plain.data).trim();
+    if (text.length > 0) return text;
+  }
+  const html = candidates.find((c) => c.mime === "text/html");
+  if (html) {
+    const text = htmlToText(decodeBase64Url(html.data));
+    if (text.length > 0) return text;
+  }
+  return null;
+}
+
 export async function syncRecentMessages(clerkUserId: string) {
   const supabase = createSupabaseServiceClient();
   const { oauth2, googleEmail } = await getAuthClient(clerkUserId);
   const gmail = google.gmail({ version: "v1", auth: oauth2 });
   const selfEmail = googleEmail.toLowerCase();
 
-  // The gmail.metadata scope rejects the `q` parameter, so we list the
-  // newest MAX_MESSAGES across the account (newest first by default) and
-  // filter to the last RECENT_DAYS in the processing loop below.
+  // gmail.readonly accepts `q` — keep the unqualified list to mirror v1
+  // behaviour (newest 500 across all categories), filter date-side below.
   const list = await gmail.users.messages.list({
     userId: "me",
     maxResults: MAX_MESSAGES,
@@ -124,7 +134,8 @@ export async function syncRecentMessages(clerkUserId: string) {
     return { messagesScanned: 0, contactsUpserted: 0, threadsUpserted: 0 };
   }
 
-  // Fetch metadata for all messages in parallel batches of 25.
+  // Fetch full messages in parallel batches of 25. `format=full` gives us
+  // body parts; we drop them after extracting a single 2 KB excerpt per thread.
   const messages: gmail_v1.Schema$Message[] = [];
   for (let i = 0; i < messageIds.length; i += 25) {
     const slice = messageIds.slice(i, i + 25);
@@ -134,8 +145,7 @@ export async function syncRecentMessages(clerkUserId: string) {
           .get({
             userId: "me",
             id,
-            format: "metadata",
-            metadataHeaders: ["From", "To", "Cc", "Subject", "Date"],
+            format: "full",
           })
           .then((r) => r.data),
       ),
@@ -143,22 +153,29 @@ export async function syncRecentMessages(clerkUserId: string) {
     messages.push(...fetched);
   }
 
-  // Aggregate contacts: email -> {display_name, last_seen, count}
+  // Aggregate contacts: email -> rich record.
   type ContactAgg = {
     email: string;
     displayName: string | null;
     lastSeen: Date;
     count: number;
+    hasUnsubscribe: boolean;
+    userSentCount: number;
+    userRepliedCount: number;
   };
   const contactByEmail = new Map<string, ContactAgg>();
 
-  // Aggregate threads: gmail_thread_id -> {subject, snippet, last_message_at, participants[]}
+  // Aggregate threads.
   type ThreadAgg = {
     gmailThreadId: string;
     subject: string | null;
     snippet: string | null;
     lastMessageAt: Date;
     participants: Map<string, "from" | "to" | "cc">;
+    hasUnsubscribe: boolean;
+    replyTo: string | null;
+    userParticipated: boolean;
+    bodyExcerpt: string | null;
   };
   const threadById = new Map<string, ThreadAgg>();
 
@@ -170,10 +187,21 @@ export async function syncRecentMessages(clerkUserId: string) {
     if (date.getTime() < cutoffMs) continue;
     const subject = headerValue(msg, "Subject") ?? null;
     const snippet = msg.snippet ?? null;
+    const listUnsub = headerValue(msg, "List-Unsubscribe");
+    const replyTo = headerValue(msg, "Reply-To") ?? null;
+    const inReplyTo = headerValue(msg, "In-Reply-To") ?? null;
+    const messageHasUnsub = !!listUnsub;
 
     const fromAddrs = parseAddresses(headerValue(msg, "From"));
     const toAddrs = parseAddresses(headerValue(msg, "To"));
     const ccAddrs = parseAddresses(headerValue(msg, "Cc"));
+
+    // Did the user participate in this message? (they're From, or in To/Cc)
+    const fromIsSelf = fromAddrs.some((a) => a.email === selfEmail);
+    const recipientIsSelf =
+      toAddrs.some((a) => a.email === selfEmail) ||
+      ccAddrs.some((a) => a.email === selfEmail);
+    const userParticipatedHere = fromIsSelf || recipientIsSelf;
 
     const allContactAddrs: Array<{ addr: ParsedAddress; role: "from" | "to" | "cc" }> = [
       ...fromAddrs.map((a) => ({ addr: a, role: "from" as const })),
@@ -181,23 +209,46 @@ export async function syncRecentMessages(clerkUserId: string) {
       ...ccAddrs.map((a) => ({ addr: a, role: "cc" as const })),
     ].filter(({ addr }) => addr.email !== selfEmail);
 
-    for (const { addr } of allContactAddrs) {
+    for (const { addr, role } of allContactAddrs) {
       const existing = contactByEmail.get(addr.email);
+      // user_sent_count = times user sent TO this contact (selfEmail in From,
+      // contact in To/Cc/Bcc — for our purposes, contact appears as to/cc).
+      // user_replied_count = same but only when the message is a reply
+      // (In-Reply-To is set), which approximates "user wrote back to them".
+      const sentInc =
+        fromIsSelf && (role === "to" || role === "cc") ? 1 : 0;
+      const repliedInc = sentInc && inReplyTo ? 1 : 0;
       if (existing) {
         existing.count += 1;
         if (addr.name && !existing.displayName) existing.displayName = addr.name;
         if (date > existing.lastSeen) existing.lastSeen = date;
+        if (messageHasUnsub) existing.hasUnsubscribe = true;
+        existing.userSentCount += sentInc;
+        existing.userRepliedCount += repliedInc;
       } else {
         contactByEmail.set(addr.email, {
           email: addr.email,
           displayName: addr.name,
           lastSeen: date,
           count: 1,
+          hasUnsubscribe: messageHasUnsub,
+          userSentCount: sentInc,
+          userRepliedCount: repliedInc,
         });
       }
     }
 
     const tAgg = threadById.get(msg.threadId);
+    // Decide if we want to keep a body excerpt for this thread. Only worth
+    // the storage/tokens when (a) it's bulk mail (digest needs the body) or
+    // (b) the user is in the conversation (summary/scoring need context).
+    const wantBody = messageHasUnsub || userParticipatedHere;
+    let extractedBody: string | null = null;
+    if (wantBody) {
+      const text = extractBodyText(msg.payload ?? undefined);
+      if (text) extractedBody = text.slice(0, BODY_EXCERPT_MAX);
+    }
+
     if (tAgg) {
       if (date > tAgg.lastMessageAt) {
         tAgg.lastMessageAt = date;
@@ -208,6 +259,13 @@ export async function syncRecentMessages(clerkUserId: string) {
         if (!tAgg.participants.has(addr.email)) {
           tAgg.participants.set(addr.email, role);
         }
+      }
+      if (messageHasUnsub) tAgg.hasUnsubscribe = true;
+      if (replyTo && !tAgg.replyTo) tAgg.replyTo = replyTo;
+      if (userParticipatedHere) tAgg.userParticipated = true;
+      // Prefer the longest body excerpt seen across the thread.
+      if (extractedBody && (!tAgg.bodyExcerpt || extractedBody.length > tAgg.bodyExcerpt.length)) {
+        tAgg.bodyExcerpt = extractedBody;
       }
     } else {
       const participants = new Map<string, "from" | "to" | "cc">();
@@ -220,14 +278,16 @@ export async function syncRecentMessages(clerkUserId: string) {
         snippet,
         lastMessageAt: date,
         participants,
+        hasUnsubscribe: messageHasUnsub,
+        replyTo,
+        userParticipated: userParticipatedHere,
+        bodyExcerpt: extractedBody,
       });
     }
   }
 
-  // Pre-read existing contacts so we can: preserve user-locked kind/reason
-  // verbatim; preserve LLM-assigned kinds (kind != 'unknown') that the
-  // heuristic doesn't have an opinion on; and only overwrite kinds when the
-  // heuristic now has a stronger opinion.
+  // Pre-read existing contacts to preserve user-locked classifications and
+  // any prior LLM-assigned kinds the heuristic can't decide on.
   const emails = Array.from(contactByEmail.keys());
   const existingByEmail = new Map<
     string,
@@ -235,19 +295,22 @@ export async function syncRecentMessages(clerkUserId: string) {
       kind: ContactKind;
       kind_reason: string | null;
       kind_locked: boolean;
+      is_hidden: boolean;
     }
   >();
   if (emails.length > 0) {
     const { data: existing } = await supabase
       .from("contacts")
-      .select("email, kind, kind_reason, kind_locked")
+      .select("email, kind, kind_reason, kind_locked, is_hidden")
       .eq("clerk_user_id", clerkUserId)
       .in("email", emails);
     for (const row of existing ?? []) {
+      if (!row.email) continue;
       existingByEmail.set(row.email, {
         kind: row.kind,
         kind_reason: row.kind_reason,
         kind_locked: row.kind_locked,
+        is_hidden: row.is_hidden,
       });
     }
   }
@@ -259,25 +322,34 @@ export async function syncRecentMessages(clerkUserId: string) {
       email: c.email,
       displayName: c.displayName,
       messageCount: c.count,
+      hasUnsubscribe: c.hasUnsubscribe,
+      userRepliedCount: c.userRepliedCount,
+      userSentCount: c.userSentCount,
     });
 
     let kind: ContactKind;
     let kind_reason: string | null;
+    let is_hidden: boolean;
     if (ex?.kind_locked) {
-      // User override wins forever — never reclassify.
+      // User override wins forever — never reclassify or rehide.
       kind = ex.kind;
       kind_reason = ex.kind_reason;
+      is_hidden = ex.is_hidden;
     } else if (heuristic) {
       kind = heuristic.kind;
       kind_reason = heuristic.reason;
+      // Only auto-hide on the *first* heuristic pass for this kind. If the
+      // contact is already known and visible, don't surprise-hide it.
+      is_hidden = ex ? ex.is_hidden : heuristic.isHidden;
+      if (!ex && heuristic.isHidden) is_hidden = true;
     } else if (ex && ex.kind !== "unknown") {
-      // Heuristic has no opinion but the LLM (or a previous heuristic
-      // version) already classified this contact — keep that.
       kind = ex.kind;
       kind_reason = ex.kind_reason;
+      is_hidden = ex.is_hidden;
     } else {
       kind = "unknown";
       kind_reason = null;
+      is_hidden = ex?.is_hidden ?? false;
     }
 
     return {
@@ -288,6 +360,9 @@ export async function syncRecentMessages(clerkUserId: string) {
       message_count: c.count,
       kind,
       kind_reason,
+      is_hidden,
+      user_sent_count: c.userSentCount,
+      user_replied_count: c.userRepliedCount,
     };
   });
 
@@ -298,14 +373,19 @@ export async function syncRecentMessages(clerkUserId: string) {
     if (contactErr) throw contactErr;
   }
 
-  // Read back contact ids so we can link thread_participants.
+  // Read back contact ids so we can link thread_participants. Email-only
+  // map is fine here — LinkedIn-only rows (email=null) have no thread
+  // participation.
   const { data: contactIdRows, error: readErr } = await supabase
     .from("contacts")
     .select("id, email")
-    .eq("clerk_user_id", clerkUserId);
+    .eq("clerk_user_id", clerkUserId)
+    .not("email", "is", null);
   if (readErr) throw readErr;
   const contactIdByEmail = new Map(
-    (contactIdRows ?? []).map((r) => [r.email, r.id]),
+    (contactIdRows ?? [])
+      .filter((r): r is { id: string; email: string } => !!r.email)
+      .map((r) => [r.email, r.id]),
   );
 
   // Bulk upsert threads.
@@ -315,6 +395,10 @@ export async function syncRecentMessages(clerkUserId: string) {
     subject: t.subject,
     snippet: t.snippet,
     last_message_at: t.lastMessageAt.toISOString(),
+    body_excerpt: t.bodyExcerpt,
+    has_unsubscribe: t.hasUnsubscribe,
+    reply_to: t.replyTo,
+    user_participated: t.userParticipated,
   }));
 
   if (threadRows.length > 0) {
@@ -371,3 +455,7 @@ export async function syncRecentMessages(clerkUserId: string) {
     threadsUpserted: threadRows.length,
   };
 }
+
+// Re-export so callers that imported from `gmail/sync` continue to compile.
+// Send/calendar routes should prefer the canonical `lib/google/auth` path.
+export { getAuthClient } from "@/lib/google/auth";

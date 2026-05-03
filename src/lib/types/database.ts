@@ -9,6 +9,8 @@ export type ContactKind =
   | "automated"
   | "noreply"
   | "spam"
+  | "bulk_marketing"
+  | "transactional"
   | "unknown";
 
 export const CONTACT_KINDS: ContactKind[] = [
@@ -17,8 +19,12 @@ export const CONTACT_KINDS: ContactKind[] = [
   "automated",
   "noreply",
   "spam",
+  "bulk_marketing",
+  "transactional",
   "unknown",
 ];
+
+export type ContactSource = "gmail" | "linkedin" | "manual";
 
 export type BookmarkKind =
   | "github"
@@ -35,6 +41,21 @@ export const BOOKMARK_KINDS: BookmarkKind[] = [
   "other",
 ];
 
+export type SelfProfile = {
+  industry?: string | null;
+  role?: string | null;
+  age_bracket?: string | null; // e.g. "20s", "30s", "40s"
+  location?: string | null;
+};
+
+export type ScoresRationale = {
+  closeness?: string;
+  keep_in_touch?: string;
+  industry_overlap?: string;
+  age_proximity?: string;
+  career_relevance?: string;
+};
+
 export type Database = {
   public: {
     Tables: {
@@ -42,11 +63,13 @@ export type Database = {
         Row: {
           clerk_user_id: string;
           email: string | null;
+          self_profile: SelfProfile;
           created_at: string;
         };
         Insert: {
           clerk_user_id: string;
           email?: string | null;
+          self_profile?: SelfProfile;
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["app_users"]["Insert"]>;
@@ -82,7 +105,7 @@ export type Database = {
         Row: {
           id: string;
           clerk_user_id: string;
-          email: string;
+          email: string | null;
           display_name: string | null;
           last_interaction_at: string | null;
           message_count: number;
@@ -93,11 +116,31 @@ export type Database = {
           is_pinned: boolean;
           ai_summary: string | null;
           ai_summary_at: string | null;
+          source: ContactSource;
+          is_hidden: boolean;
+          hidden_reason: string | null;
+          linkedin_url: string | null;
+          company: string | null;
+          job_title: string | null;
+          industry: string | null;
+          location: string | null;
+          birthday: string | null;
+          tags: string[];
+          notes: string | null;
+          user_sent_count: number;
+          user_replied_count: number;
+          score_closeness: number | null;
+          score_keep_in_touch: number | null;
+          score_industry_overlap: number | null;
+          score_age_proximity: number | null;
+          score_career_relevance: number | null;
+          scores_rationale: ScoresRationale | null;
+          scores_at: string | null;
         };
         Insert: {
           id?: string;
           clerk_user_id: string;
-          email: string;
+          email?: string | null;
           display_name?: string | null;
           last_interaction_at?: string | null;
           message_count?: number;
@@ -107,6 +150,26 @@ export type Database = {
           is_pinned?: boolean;
           ai_summary?: string | null;
           ai_summary_at?: string | null;
+          source?: ContactSource;
+          is_hidden?: boolean;
+          hidden_reason?: string | null;
+          linkedin_url?: string | null;
+          company?: string | null;
+          job_title?: string | null;
+          industry?: string | null;
+          location?: string | null;
+          birthday?: string | null;
+          tags?: string[];
+          notes?: string | null;
+          user_sent_count?: number;
+          user_replied_count?: number;
+          score_closeness?: number | null;
+          score_keep_in_touch?: number | null;
+          score_industry_overlap?: number | null;
+          score_age_proximity?: number | null;
+          score_career_relevance?: number | null;
+          scores_rationale?: ScoresRationale | null;
+          scores_at?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["contacts"]["Insert"]>;
         Relationships: [];
@@ -120,6 +183,10 @@ export type Database = {
           snippet: string | null;
           last_message_at: string | null;
           created_at: string;
+          body_excerpt: string | null;
+          has_unsubscribe: boolean;
+          reply_to: string | null;
+          user_participated: boolean;
         };
         Insert: {
           id?: string;
@@ -128,6 +195,10 @@ export type Database = {
           subject?: string | null;
           snippet?: string | null;
           last_message_at?: string | null;
+          body_excerpt?: string | null;
+          has_unsubscribe?: boolean;
+          reply_to?: string | null;
+          user_participated?: boolean;
         };
         Update: Partial<Database["public"]["Tables"]["threads"]["Insert"]>;
         Relationships: [];

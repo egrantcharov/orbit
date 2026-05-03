@@ -57,6 +57,9 @@ export async function POST(
   if (!threads || threads.length === 0) {
     return NextResponse.json({ error: "no_threads" }, { status: 400 });
   }
+  if (!contact.email) {
+    return NextResponse.json({ error: "no_email" }, { status: 400 });
+  }
 
   try {
     const summary = await summarizeRelationship({

@@ -3,12 +3,17 @@ import type { ContactKind } from "@/lib/types/database";
 export type Classification = {
   kind: ContactKind;
   reason: string;
+  isHidden: boolean;
 };
 
 export type ClassifyInput = {
   email: string;
   displayName: string | null;
   messageCount: number;
+  // v2 signals — sync.ts populates these from Gmail headers + direction parsing.
+  hasUnsubscribe?: boolean;
+  userRepliedCount?: number;
+  userSentCount?: number;
 };
 
 const NOREPLY_LOCAL = new Set([
@@ -51,6 +56,18 @@ const AUTOMATED_PREFIXES = [
   "verification",
   "noreply-",
 ];
+
+// Local-parts that almost always indicate retail / transactional bulk mail.
+// Caught BEFORE the generic newsletter/automated rules so we can flag them
+// `is_hidden=true`.
+const TRANSACTIONAL_LOCAL_RE =
+  /^(shop|deals?|offers?|sale|sales|orders?|tickets?|reservations?|bookings?|accounts?|statements?|receipts?|invoices?|delivery|shipping|tracking|rewards?|loyalty|promo|promotions?)([._+-].*)?$/;
+
+// Brand retail subdomains (emails.macys.com, e.link.com, reply.ebay.com,
+// emails.flyfrontier.com, mailer.brand.tld, etc.). Brand owns the apex,
+// uses a subdomain for outbound marketing — strong B2C signal.
+const RETAIL_SUBDOMAIN_RE =
+  /^(emails?|e|em|mail|mailer|reply|news|notifications?|newsletter|message|messaging|info|update|updates|comms|hello|do-not-reply|donotreply|noreply|no-reply)\.[a-z0-9-]+\.[a-z]{2,}$/;
 
 const NEWSLETTER_LOCALS = new Set([
   "marketing",
@@ -151,59 +168,136 @@ function isLikelyAutomatedDomain(domain: string): boolean {
   );
 }
 
+function nameLooksLikeNewsletter(name: string | null): boolean {
+  if (!name) return false;
+  return NEWSLETTER_NAME_PATTERNS.some((re) => re.test(name));
+}
+
 /**
  * Heuristic classifier. Returns null when no rule fires — those go to the
  * Claude fallback in `lib/classify/llm.ts`.
+ *
+ * v2 contract: returns { kind, reason, isHidden }. `isHidden=true` flags
+ * contacts that should be soft-archived from the default contact list (the
+ * "Hidden" tab still surfaces them, and the user can unhide).
  */
 export function heuristicClassify(input: ClassifyInput): Classification | null {
   const email = input.email.toLowerCase();
   const local = localPart(email);
   const domain = domainPart(email);
   const name = input.displayName?.trim() ?? null;
+  const replied = input.userRepliedCount ?? 0;
+  const hasUnsub = input.hasUnsubscribe ?? false;
 
   // Rule 1: explicit noreply locals.
   if (NOREPLY_LOCAL.has(local)) {
-    return { kind: "noreply", reason: `noreply local-part (${local})` };
+    return {
+      kind: "noreply",
+      reason: `noreply local-part (${local})`,
+      isHidden: replied === 0,
+    };
   }
   for (const prefix of NOREPLY_PREFIXES) {
     if (local.startsWith(`${prefix}+`) || local.startsWith(`${prefix}-`)) {
-      return { kind: "noreply", reason: `noreply prefix (${prefix})` };
+      return {
+        kind: "noreply",
+        reason: `noreply prefix (${prefix})`,
+        isHidden: replied === 0,
+      };
     }
   }
 
-  // Rule 2: automated prefixes.
+  // Rule 2: List-Unsubscribe header → bulk mail. If it looks like a real
+  // newsletter (display name or local part matches a newsletter pattern)
+  // keep it visible so the digest can pick it up. Otherwise it's brand
+  // marketing — auto-hide.
+  if (hasUnsub && replied === 0) {
+    const looksNewsletter =
+      nameLooksLikeNewsletter(name) || NEWSLETTER_LOCALS.has(local);
+    if (looksNewsletter) {
+      return {
+        kind: "newsletter",
+        reason: "List-Unsubscribe + newsletter signal",
+        isHidden: false,
+      };
+    }
+    return {
+      kind: "bulk_marketing",
+      reason: "List-Unsubscribe header (bulk mail you've never replied to)",
+      isHidden: true,
+    };
+  }
+
+  // Rule 3: transactional local-parts (shop@, deals@, orders@, invoices@…).
+  if (TRANSACTIONAL_LOCAL_RE.test(local) && replied === 0) {
+    return {
+      kind: "transactional",
+      reason: `transactional local-part (${local})`,
+      isHidden: true,
+    };
+  }
+
+  // Rule 4: retail subdomain pattern (emails.brand.com, reply.brand.com,
+  // e.brand.com, mailer.brand.tld). Almost always marketing.
+  if (RETAIL_SUBDOMAIN_RE.test(domain) && replied === 0) {
+    return {
+      kind: "bulk_marketing",
+      reason: `retail subdomain pattern (${domain})`,
+      isHidden: true,
+    };
+  }
+
+  // Rule 5: automated prefixes (notifications@, billing@, security@…).
   for (const prefix of AUTOMATED_PREFIXES) {
     if (local === prefix || local.startsWith(`${prefix}-`) || local.startsWith(`${prefix}.`)) {
-      return { kind: "automated", reason: `automated prefix (${prefix})` };
+      return {
+        kind: "automated",
+        reason: `automated prefix (${prefix})`,
+        isHidden: replied === 0,
+      };
     }
   }
 
-  // Rule 3: newsletter-ish locals.
+  // Rule 6: newsletter-ish locals.
   if (NEWSLETTER_LOCALS.has(local)) {
-    return input.messageCount >= 2
-      ? { kind: "newsletter", reason: `newsletter local-part (${local})` }
-      : { kind: "automated", reason: `single-msg ${local}@ probably automated` };
-  }
-
-  // Rule 4: display-name gives it away.
-  if (name) {
-    for (const re of NEWSLETTER_NAME_PATTERNS) {
-      if (re.test(name)) {
-        return { kind: "newsletter", reason: `display-name pattern ${re}` };
-      }
+    if (input.messageCount >= 2) {
+      return {
+        kind: "newsletter",
+        reason: `newsletter local-part (${local})`,
+        isHidden: false,
+      };
     }
+    return {
+      kind: "automated",
+      reason: `single-msg ${local}@ probably automated`,
+      isHidden: true,
+    };
   }
 
-  // Rule 5: known transactional / marketing domains.
+  // Rule 7: display-name gives it away.
+  if (nameLooksLikeNewsletter(name)) {
+    return {
+      kind: "newsletter",
+      reason: "display-name newsletter pattern",
+      isHidden: false,
+    };
+  }
+
+  // Rule 8: known transactional / marketing ESP domains.
   if (isLikelyAutomatedDomain(domain)) {
-    return { kind: "automated", reason: `transactional domain ${domain}` };
+    return {
+      kind: "automated",
+      reason: `transactional domain ${domain}`,
+      isHidden: replied === 0,
+    };
   }
 
-  // Rule 6: one-off, no display name — almost always automation noise.
+  // Rule 9: one-off, no display name — almost always automation noise.
   if (input.messageCount === 1 && !name) {
     return {
       kind: "automated",
       reason: "single message and no display name",
+      isHidden: replied === 0,
     };
   }
 

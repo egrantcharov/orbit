@@ -47,12 +47,15 @@ export async function POST() {
     }
   }
 
-  // Pull newsletter contacts.
+  // Pull bulk-mail contacts (newsletters + bulk_marketing) the user hasn't
+  // replied to. Replies signal it's a real human conversation, not a digest
+  // candidate.
   const { data: newsletters } = await supabase
     .from("contacts")
-    .select("id, email, display_name")
+    .select("id, email, display_name, kind")
     .eq("clerk_user_id", userId)
-    .eq("kind", "newsletter");
+    .in("kind", ["newsletter", "bulk_marketing"])
+    .eq("user_replied_count", 0);
 
   const ids = (newsletters ?? []).map((n) => n.id);
   if (ids.length === 0) {
@@ -65,7 +68,7 @@ export async function POST() {
     });
   }
   const nameByEmail = new Map(
-    (newsletters ?? []).map((n) => [n.email, n.display_name ?? n.email]),
+    (newsletters ?? []).map((n) => [n.email ?? "", n.display_name ?? n.email ?? ""]),
   );
 
   // Pull threads from those contacts in the last 7 days.
@@ -94,7 +97,7 @@ export async function POST() {
   const cutoff = new Date(Date.now() - 7 * 86_400_000).toISOString();
   const { data: threads } = await supabase
     .from("threads")
-    .select("id, subject, snippet, last_message_at")
+    .select("id, subject, body_excerpt, snippet, last_message_at")
     .eq("clerk_user_id", userId)
     .in("id", threadIds)
     .gte("last_message_at", cutoff)
@@ -111,7 +114,7 @@ export async function POST() {
   }
 
   const contactById = new Map(
-    (newsletters ?? []).map((n) => [n.id, n.email]),
+    (newsletters ?? []).map((n) => [n.id, n.email ?? ""]),
   );
   const items: DigestItem[] = threads
     .filter((t) => t.last_message_at && t.subject)
@@ -122,7 +125,7 @@ export async function POST() {
       return {
         from: fromName,
         subject: t.subject!,
-        snippet: t.snippet,
+        body: t.body_excerpt ?? t.snippet ?? null,
         date: t.last_message_at!,
       };
     });

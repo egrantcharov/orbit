@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
   if (typeof body.question !== "string" || !body.question.trim()) {
     return NextResponse.json({ error: "missing_question" }, { status: 400 });
   }
-  if (body.question.length > 1000) {
+  if (body.question.length > 2000) {
     return NextResponse.json({ error: "too_long" }, { status: 400 });
   }
 

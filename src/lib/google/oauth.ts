@@ -1,8 +1,12 @@
 import { google } from "googleapis";
 
+// v2 scopes. Re-consent required to upgrade from v1 (which used
+// gmail.metadata + calendar.readonly). See `scopes.ts` for the helper that
+// detects scope mismatch and triggers the reconnect banner.
 export const GOOGLE_SCOPES = [
-  "https://www.googleapis.com/auth/gmail.metadata",
-  "https://www.googleapis.com/auth/calendar.readonly",
+  "https://www.googleapis.com/auth/gmail.readonly",
+  "https://www.googleapis.com/auth/gmail.send",
+  "https://www.googleapis.com/auth/calendar.events",
   "openid",
   "email",
   "profile",

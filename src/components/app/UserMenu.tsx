@@ -4,7 +4,8 @@ import { useClerk, useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
-import { LogOut, Unplug, ChevronDown } from "lucide-react";
+import { LogOut, Unplug, ChevronDown, Settings } from "lucide-react";
+import Link from "next/link";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -95,6 +96,12 @@ export function UserMenu({
           </>
         )}
         <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <Link href="/app/settings">
+            <Settings />
+            Your profile
+          </Link>
+        </DropdownMenuItem>
         <DropdownMenuItem onClick={() => signOut(() => router.push("/"))}>
           <LogOut />
           Sign out

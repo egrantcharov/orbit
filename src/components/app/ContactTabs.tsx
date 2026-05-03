@@ -1,13 +1,14 @@
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 
-export type ContactTab = "people" | "newsletters" | "all" | "pinned";
+export type ContactTab = "people" | "newsletters" | "all" | "pinned" | "hidden";
 
 const TABS: Array<{ key: ContactTab; label: string }> = [
   { key: "people", label: "People" },
   { key: "newsletters", label: "Newsletters" },
   { key: "all", label: "All" },
   { key: "pinned", label: "Pinned" },
+  { key: "hidden", label: "Hidden" },
 ];
 
 export function ContactTabs({
@@ -52,5 +53,11 @@ export function ContactTabs({
 }
 
 export function isContactTab(value: string | undefined): value is ContactTab {
-  return value === "people" || value === "newsletters" || value === "all" || value === "pinned";
+  return (
+    value === "people" ||
+    value === "newsletters" ||
+    value === "all" ||
+    value === "pinned" ||
+    value === "hidden"
+  );
 }

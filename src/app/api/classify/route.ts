@@ -18,12 +18,15 @@ export async function POST() {
 
   // Pull contacts that the heuristic punted on. Order by message_count so the
   // most-active ambiguous contacts get classified first if we hit the cap.
+  // LinkedIn-only rows have email=null and are kind_locked=true so they're
+  // excluded automatically.
   const { data: contacts, error: readErr } = await supabase
     .from("contacts")
     .select("id, email, display_name, message_count")
     .eq("clerk_user_id", userId)
     .eq("kind", "unknown")
     .eq("kind_locked", false)
+    .not("email", "is", null)
     .order("message_count", { ascending: false })
     .limit(MAX_PER_CALL);
 
@@ -65,15 +68,17 @@ export async function POST() {
     }
   }
 
-  const targets: ClassifyTarget[] = contacts.map((c) => ({
-    id: c.id,
-    email: c.email,
-    display_name: c.display_name,
-    message_count: c.message_count,
-    sample_subjects: (threadIdsByContact.get(c.id) ?? [])
-      .map((tid) => subjectByThreadId.get(tid))
-      .filter((s): s is string => !!s),
-  }));
+  const targets: ClassifyTarget[] = contacts
+    .filter((c): c is typeof c & { email: string } => !!c.email)
+    .map((c) => ({
+      id: c.id,
+      email: c.email,
+      display_name: c.display_name,
+      message_count: c.message_count,
+      sample_subjects: (threadIdsByContact.get(c.id) ?? [])
+        .map((tid) => subjectByThreadId.get(tid))
+        .filter((s): s is string => !!s),
+    }));
 
   let classifiedCount = 0;
   const errors: string[] = [];

@@ -13,9 +13,9 @@ export function ConnectGoogleEmpty({ error }: { error?: string }) {
           Connect your Google account
         </h2>
         <p className="text-sm text-muted-foreground leading-relaxed text-balance">
-          Orbit reads your Gmail metadata (sender, recipients, subject, date —
-          never message bodies in v1) to build a relationship timeline. You can
-          disconnect at any time.
+          Orbit reads Gmail to build a relationship timeline, sends email on
+          your behalf, and creates calendar events. Tokens are encrypted at
+          rest and you can disconnect at any time.
         </p>
       </div>
       {error && (

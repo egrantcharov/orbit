@@ -17,18 +17,22 @@ import { Button } from "@/components/ui/button";
 import { ContactAvatar } from "@/components/ui/contact-avatar";
 import { PinButton } from "@/components/app/PinButton";
 import { ClassifyMenu } from "@/components/app/ClassifyMenu";
+import { HideButton } from "@/components/app/HideButton";
 import { formatRelativeTime } from "@/lib/format";
 import { cn, emailDomain } from "@/lib/utils";
 import type { ContactKind } from "@/lib/types/database";
 
 export type ContactRow = {
   id: string;
-  email: string;
+  email: string | null;
   display_name: string | null;
   last_interaction_at: string | null;
   message_count: number;
   kind: ContactKind;
   is_pinned: boolean;
+  is_hidden?: boolean;
+  company?: string | null;
+  job_title?: string | null;
 };
 
 type Sort = "recent" | "count" | "name" | "name_desc";
@@ -74,9 +78,9 @@ function sortFn(a: ContactRow, b: ContactRow, sort: Sort): number {
     case "count":
       return b.message_count - a.message_count;
     case "name":
-      return (a.display_name ?? a.email).localeCompare(b.display_name ?? b.email);
+      return (a.display_name ?? a.email ?? "").localeCompare(b.display_name ?? b.email ?? "");
     case "name_desc":
-      return (b.display_name ?? b.email).localeCompare(a.display_name ?? a.email);
+      return (b.display_name ?? b.email ?? "").localeCompare(a.display_name ?? a.email ?? "");
   }
 }
 
@@ -91,8 +95,10 @@ export function ContactList({ contacts }: { contacts: ContactRow[] }) {
       .filter((c) => {
         if (
           q &&
-          !c.email.toLowerCase().includes(q) &&
-          !(c.display_name ?? "").toLowerCase().includes(q)
+          !(c.email ?? "").toLowerCase().includes(q) &&
+          !(c.display_name ?? "").toLowerCase().includes(q) &&
+          !(c.company ?? "").toLowerCase().includes(q) &&
+          !(c.job_title ?? "").toLowerCase().includes(q)
         ) {
           return false;
         }
@@ -191,7 +197,7 @@ export function ContactList({ contacts }: { contacts: ContactRow[] }) {
                   className="flex flex-1 items-center gap-4 min-w-0"
                 >
                   <ContactAvatar
-                    email={c.email}
+                    email={c.email ?? ""}
                     displayName={c.display_name}
                     size="md"
                   />
@@ -201,20 +207,26 @@ export function ContactList({ contacts }: { contacts: ContactRow[] }) {
                         <Pin className="h-3 w-3 shrink-0 text-amber-600 dark:text-amber-400 fill-current" />
                       )}
                       <span className="text-sm font-medium truncate">
-                        {c.display_name ?? c.email}
+                        {c.display_name ?? c.email ?? "(no email)"}
                       </span>
-                      <Badge
-                        variant="muted"
-                        className="hidden sm:inline-flex font-normal"
-                      >
-                        {emailDomain(c.email)}
-                      </Badge>
+                      {c.email && (
+                        <Badge
+                          variant="muted"
+                          className="hidden sm:inline-flex font-normal"
+                        >
+                          {emailDomain(c.email)}
+                        </Badge>
+                      )}
                     </div>
-                    {c.display_name && (
+                    {(c.job_title || c.company) ? (
+                      <span className="text-xs text-muted-foreground truncate">
+                        {[c.job_title, c.company].filter(Boolean).join(" · ")}
+                      </span>
+                    ) : c.display_name && c.email ? (
                       <span className="text-xs text-muted-foreground truncate">
                         {c.email}
                       </span>
-                    )}
+                    ) : null}
                   </div>
                   <div className="flex flex-col items-end gap-0.5 text-xs text-muted-foreground shrink-0 mr-2">
                     <span>{formatRelativeTime(c.last_interaction_at)}</span>
@@ -226,6 +238,11 @@ export function ContactList({ contacts }: { contacts: ContactRow[] }) {
                 </Link>
                 <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
                   <PinButton contactId={c.id} pinned={c.is_pinned} size="sm" />
+                  <HideButton
+                    contactId={c.id}
+                    hidden={c.is_hidden ?? false}
+                    size="sm"
+                  />
                   <ClassifyMenu
                     contactId={c.id}
                     currentKind={c.kind}
