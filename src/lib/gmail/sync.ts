@@ -114,12 +114,18 @@ function extractBodyText(payload: gmail_v1.Schema$MessagePart | undefined): stri
 
 export async function syncRecentMessages(clerkUserId: string) {
   const supabase = createSupabaseServiceClient();
-  const { oauth2, googleEmail } = await getAuthClient(clerkUserId);
+  const { oauth2, googleEmail, scopes } = await getAuthClient(clerkUserId);
   const gmail = google.gmail({ version: "v1", auth: oauth2 });
   const selfEmail = googleEmail.toLowerCase();
 
-  // gmail.readonly accepts `q` — keep the unqualified list to mirror v1
-  // behaviour (newest 500 across all categories), filter date-side below.
+  // Graceful degradation: if the user only granted gmail.metadata, fall back
+  // to header-only fetching (v1 behavior). Heuristic + classification still
+  // run, so junk gets classified and hidden either way; only the body
+  // excerpt — which feeds the digest and scoring — is skipped.
+  const hasReadonly = (scopes ?? []).includes(
+    "https://www.googleapis.com/auth/gmail.readonly",
+  );
+
   const list = await gmail.users.messages.list({
     userId: "me",
     maxResults: MAX_MESSAGES,
@@ -134,19 +140,35 @@ export async function syncRecentMessages(clerkUserId: string) {
     return { messagesScanned: 0, contactsUpserted: 0, threadsUpserted: 0 };
   }
 
-  // Fetch full messages in parallel batches of 25. `format=full` gives us
-  // body parts; we drop them after extracting a single 2 KB excerpt per thread.
+  // Fetch messages in parallel batches of 25. With gmail.readonly we get
+  // the body via format=full; otherwise we ask for metadata + the headers
+  // we care about (which gmail.metadata permits).
   const messages: gmail_v1.Schema$Message[] = [];
   for (let i = 0; i < messageIds.length; i += 25) {
     const slice = messageIds.slice(i, i + 25);
     const fetched = await Promise.all(
       slice.map((id) =>
         gmail.users.messages
-          .get({
-            userId: "me",
-            id,
-            format: "full",
-          })
+          .get(
+            hasReadonly
+              ? { userId: "me", id, format: "full" }
+              : {
+                  userId: "me",
+                  id,
+                  format: "metadata",
+                  metadataHeaders: [
+                    "From",
+                    "To",
+                    "Cc",
+                    "Subject",
+                    "Date",
+                    "Reply-To",
+                    "List-Unsubscribe",
+                    "In-Reply-To",
+                    "Message-ID",
+                  ],
+                },
+          )
           .then((r) => r.data),
       ),
     );

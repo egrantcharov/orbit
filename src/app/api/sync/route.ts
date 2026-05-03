@@ -2,7 +2,6 @@ import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { syncRecentMessages } from "@/lib/gmail/sync";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
-import { hasAllScopes } from "@/lib/google/scopes";
 
 export const maxDuration = 60;
 
@@ -18,7 +17,7 @@ export async function POST() {
   const supabase = createSupabaseServiceClient();
   const { data: connection, error: connErr } = await supabase
     .from("google_connections")
-    .select("last_sync_at, scopes")
+    .select("last_sync_at")
     .eq("clerk_user_id", userId)
     .maybeSingle();
 
@@ -27,15 +26,6 @@ export async function POST() {
   }
   if (!connection) {
     return NextResponse.json({ error: "no_connection" }, { status: 409 });
-  }
-  if (!hasAllScopes(connection.scopes)) {
-    return NextResponse.json(
-      {
-        error:
-          "Reconnect Google to upgrade scopes (the v2 sync needs Gmail read access).",
-      },
-      { status: 400 },
-    );
   }
 
   if (connection.last_sync_at) {
@@ -51,6 +41,9 @@ export async function POST() {
     }
   }
 
+  // Sync gracefully degrades: with only gmail.metadata it skips body
+  // excerpts; with gmail.readonly it captures them. Either way classifies
+  // contacts and hides junk.
   try {
     const result = await syncRecentMessages(userId);
     return NextResponse.json({ ok: true, ...result });
