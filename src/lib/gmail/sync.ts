@@ -118,13 +118,13 @@ export async function syncRecentMessages(clerkUserId: string) {
   const gmail = google.gmail({ version: "v1", auth: oauth2 });
   const selfEmail = googleEmail.toLowerCase();
 
-  // Graceful degradation: if the user only granted gmail.metadata, fall back
-  // to header-only fetching (v1 behavior). Heuristic + classification still
-  // run, so junk gets classified and hidden either way; only the body
-  // excerpt — which feeds the digest and scoring — is skipped.
-  const hasReadonly = (scopes ?? []).includes(
-    "https://www.googleapis.com/auth/gmail.readonly",
-  );
+  // Always use metadata-only fetching. The body excerpt was a v2 nice-to-have
+  // for the digest; the heuristic catches junk on email/domain patterns alone.
+  // Forcing metadata sidesteps the access-token-vs-scopes-column mismatch
+  // that bit us when readonly scope was granted but the cached access_token
+  // was minted before the upgrade.
+  void scopes;
+  const hasReadonly = false;
 
   const list = await gmail.users.messages.list({
     userId: "me",
