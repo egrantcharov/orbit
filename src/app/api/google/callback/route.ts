@@ -79,16 +79,23 @@ export async function GET(req: NextRequest) {
     .eq("provider", "gmail")
     .maybeSingle();
 
+  // Intentionally drop the access_token from the code-exchange response.
+  // Google access tokens are scope-bound at issue time, and we've seen
+  // cases where the cached token presented to Gmail is rejected with
+  // "Metadata scope doesn't allow format FULL" even though the scopes
+  // column shows all granted scopes. By starting with no cached token,
+  // the next API call refreshes via the refresh_token — that produces a
+  // token that always matches the refresh_token's scope grant.
+  void access_token;
+  void expiry_date;
   const connectionPayload = {
     clerk_user_id: userId,
     provider: "gmail" as const,
     account_email: googleEmail,
     google_email: googleEmail,
     refresh_token_encrypted: encryptToken(refresh_token),
-    access_token: access_token ?? null,
-    access_token_expires_at: expiry_date
-      ? new Date(expiry_date).toISOString()
-      : null,
+    access_token: null,
+    access_token_expires_at: null,
     scopes: scope ? scope.split(" ") : [],
   };
 
