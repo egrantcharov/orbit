@@ -10,7 +10,7 @@ export async function POST() {
 
   const supabase = createSupabaseServiceClient();
   const { error } = await supabase
-    .from("google_connections")
+    .from("mailbox_connections")
     .delete()
     .eq("clerk_user_id", userId);
 

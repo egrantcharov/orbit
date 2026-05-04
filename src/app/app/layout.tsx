@@ -13,8 +13,8 @@ export default async function AppLayout({
 
   const supabase = createSupabaseServiceClient();
   const { data: connection } = await supabase
-    .from("google_connections")
-    .select("google_email, last_sync_at")
+    .from("mailbox_connections")
+    .select("account_email, google_email, last_sync_at")
     .eq("clerk_user_id", userId)
     .maybeSingle();
 

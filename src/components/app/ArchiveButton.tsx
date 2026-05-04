@@ -2,42 +2,42 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff } from "lucide-react";
+import { Archive, ArchiveRestore } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
-export function HideButton({
+export function ArchiveButton({
   contactId,
-  hidden: initialHidden,
+  archived: initialArchived,
   size = "md",
 }: {
   contactId: string;
-  hidden: boolean;
+  archived: boolean;
   size?: "sm" | "md";
 }) {
   const router = useRouter();
-  const [hidden, setHidden] = useState(initialHidden);
+  const [archived, setArchived] = useState(initialArchived);
   const [isLoading, setIsLoading] = useState(false);
   const [, startTransition] = useTransition();
 
   async function toggle(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
-    const next = !hidden;
-    setHidden(next);
+    const next = !archived;
+    setArchived(next);
     setIsLoading(true);
     try {
       const res = await fetch(`/api/contacts/${contactId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ is_hidden: next }),
+        body: JSON.stringify({ is_archived: next }),
       });
-      if (!res.ok) throw new Error(`Hide failed (${res.status})`);
-      toast.success(next ? "Hidden" : "Unhidden");
+      if (!res.ok) throw new Error(`Archive failed (${res.status})`);
+      toast.success(next ? "Archived" : "Restored");
       startTransition(() => router.refresh());
     } catch (err) {
-      setHidden(!next);
-      toast.error(err instanceof Error ? err.message : "Hide failed");
+      setArchived(!next);
+      toast.error(err instanceof Error ? err.message : "Archive failed");
     } finally {
       setIsLoading(false);
     }
@@ -50,15 +50,19 @@ export function HideButton({
       type="button"
       onClick={toggle}
       disabled={isLoading}
-      title={hidden ? "Unhide" : "Hide"}
-      aria-label={hidden ? "Unhide contact" : "Hide contact"}
+      title={archived ? "Restore" : "Archive"}
+      aria-label={archived ? "Restore contact" : "Archive contact"}
       className={cn(
         "inline-flex items-center justify-center rounded-full transition-colors disabled:opacity-50",
         "hover:bg-accent text-muted-foreground hover:text-foreground",
         sizing,
       )}
     >
-      {hidden ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+      {archived ? (
+        <ArchiveRestore className="h-4 w-4" />
+      ) : (
+        <Archive className="h-4 w-4" />
+      )}
     </button>
   );
 }

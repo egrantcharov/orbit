@@ -1,14 +1,15 @@
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 
-export type ContactTab = "people" | "newsletters" | "all" | "pinned" | "hidden";
+// v3 simplified tab set. v2 had People / Newsletters / All / Pinned / Hidden
+// — kind classification is gone, so a single "All" suffices. Archived
+// (renamed from Hidden) holds soft-deleted rows; Pinned the user's stars.
+export type ContactTab = "all" | "pinned" | "archived";
 
 const TABS: Array<{ key: ContactTab; label: string }> = [
-  { key: "people", label: "People" },
-  { key: "newsletters", label: "Newsletters" },
   { key: "all", label: "All" },
   { key: "pinned", label: "Pinned" },
-  { key: "hidden", label: "Hidden" },
+  { key: "archived", label: "Archived" },
 ];
 
 export function ContactTabs({
@@ -22,8 +23,7 @@ export function ContactTabs({
     <div className="flex border-b -mb-px overflow-x-auto scrollbar-thin">
       {TABS.map((tab) => {
         const isActive = tab.key === active;
-        const href =
-          tab.key === "people" ? "/app" : `/app?tab=${tab.key}`;
+        const href = tab.key === "all" ? "/app" : `/app?tab=${tab.key}`;
         return (
           <Link
             key={tab.key}
@@ -53,11 +53,5 @@ export function ContactTabs({
 }
 
 export function isContactTab(value: string | undefined): value is ContactTab {
-  return (
-    value === "people" ||
-    value === "newsletters" ||
-    value === "all" ||
-    value === "pinned" ||
-    value === "hidden"
-  );
+  return value === "all" || value === "pinned" || value === "archived";
 }

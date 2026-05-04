@@ -77,14 +77,18 @@ export async function PATCH(
     }
     update.is_pinned = body.is_pinned;
   }
-  if (body.is_hidden !== undefined) {
+  if (body.is_archived !== undefined) {
+    if (typeof body.is_archived !== "boolean") {
+      return NextResponse.json({ error: "invalid_archived" }, { status: 400 });
+    }
+    update.is_archived = body.is_archived;
+  }
+  // accept legacy { is_hidden } shape transitionally
+  if (body.is_hidden !== undefined && body.is_archived === undefined) {
     if (typeof body.is_hidden !== "boolean") {
-      return NextResponse.json({ error: "invalid_hidden" }, { status: 400 });
+      return NextResponse.json({ error: "invalid_archived" }, { status: 400 });
     }
-    update.is_hidden = body.is_hidden;
-    if (body.is_hidden === false) {
-      update.hidden_reason = null;
-    }
+    update.is_archived = body.is_hidden;
   }
 
   for (const field of [
@@ -128,7 +132,7 @@ export async function PATCH(
     .eq("clerk_user_id", userId)
     .eq("id", id)
     .select(
-      "id, kind, kind_locked, is_pinned, is_hidden, company, job_title, industry, location, birthday, linkedin_url, tags, notes",
+      "id, is_pinned, is_archived, company, job_title, industry, location, birthday, linkedin_url, tags, notes",
     )
     .maybeSingle();
 

@@ -21,13 +21,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PinButton } from "@/components/app/PinButton";
-import { ClassifyMenu } from "@/components/app/ClassifyMenu";
-import { HideButton } from "@/components/app/HideButton";
+import { ArchiveButton } from "@/components/app/ArchiveButton";
 import { SummaryCard } from "@/components/app/SummaryCard";
 import { ScoreChart } from "@/components/app/ScoreChart";
 import { ContactProfileEditor } from "@/components/app/ContactProfileEditor";
 import { EmailComposeModal } from "@/components/app/EmailComposeModal";
 import { ScheduleEventModal } from "@/components/app/ScheduleEventModal";
+import { EnrichButton } from "@/components/app/EnrichButton";
 
 export const dynamic = "force-dynamic";
 
@@ -85,14 +85,14 @@ export default async function ContactDetail({
     supabase
       .from("contacts")
       .select(
-        "id, email, display_name, last_interaction_at, message_count, created_at, kind, kind_reason, is_pinned, is_hidden, ai_summary, ai_summary_at, source, company, job_title, industry, location, linkedin_url, birthday, tags, notes, score_closeness, score_keep_in_touch, score_industry_overlap, score_age_proximity, score_career_relevance, scores_rationale, scores_at",
+        "id, email, display_name, last_interaction_at, message_count, created_at, kind, kind_reason, is_pinned, is_archived, ai_summary, ai_summary_at, source, company, job_title, industry, location, linkedin_url, birthday, tags, notes, score_closeness, score_keep_in_touch, score_industry_overlap, score_age_proximity, score_career_relevance, scores_rationale, scores_at",
       )
       .eq("clerk_user_id", userId)
       .eq("id", id)
       .maybeSingle(),
     supabase
-      .from("google_connections")
-      .select("google_email")
+      .from("mailbox_connections")
+      .select("account_email, google_email")
       .eq("clerk_user_id", userId)
       .maybeSingle(),
   ]);
@@ -236,8 +236,7 @@ export default async function ContactDetail({
           </div>
           <div className="hidden sm:flex items-center gap-1.5">
             <PinButton contactId={contact.id} pinned={contact.is_pinned} />
-            <HideButton contactId={contact.id} hidden={contact.is_hidden} />
-            <ClassifyMenu contactId={contact.id} currentKind={contact.kind} />
+            <ArchiveButton contactId={contact.id} archived={contact.is_archived} />
           </div>
         </div>
 
@@ -262,13 +261,14 @@ export default async function ContactDetail({
             contactId={contact.id}
             contactEmail={contact.email}
             contactName={contact.display_name}
-            fromEmail={connection?.google_email ?? null}
+            fromEmail={connection?.account_email ?? connection?.google_email ?? null}
           />
           <ScheduleEventModal
             contactId={contact.id}
             contactEmail={contact.email}
             contactName={contact.display_name}
           />
+          <EnrichButton contactId={contact.id} hasEmail={!!contact.email} />
         </div>
       </Card>
 

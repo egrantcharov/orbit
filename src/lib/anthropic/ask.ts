@@ -1,9 +1,10 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { getAnthropic, SONNET } from "@/lib/anthropic/client";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
-import type { ContactKind } from "@/lib/types/database";
 
 const SYSTEM = `You are Orbit's analyst. The user asks natural-language questions about their professional network. You have tools to query the database — call them as needed, then answer directly in plain prose (≤ 6 sentences, no headers, no bullets unless the answer is genuinely a list).
+
+The user's contacts come from their LinkedIn export, generic CSV imports, or manual entry. There is no inbox auto-discovery — every contact is someone the user has explicitly chosen to track. Ignore any old "newsletter" or "automated" rows you may see; those are deprecated.
 
 Style:
 - Specific. Cite real names and counts from the data, not vague claims.
@@ -11,12 +12,11 @@ Style:
 - Honest. If the data doesn't support an answer, say what's missing.
 
 Schema you can filter on:
-- kind: person | newsletter | automated | noreply | spam | bulk_marketing | transactional | unknown
 - company, job_title, industry, location, tags (array of lowercase labels)
 - LinkedIn URL (has_linkedin), birthday (birthday_within_days)
-- relationship dimensions 0..1: closeness, keep_in_touch, industry_overlap, age_proximity, career_relevance
+- relationship dimensions 0..1: closeness, keep_in_touch, industry_overlap, age_proximity, career_relevance (only populated for contacts with ≥3 enriched threads)
 - recency (drifting_min_days / active_max_days), message_count, is_pinned
-- include_hidden=false by default (excludes archived noise)
+- include_archived=false by default (archived = soft-deleted, hidden by default)
 
 Heuristics:
 - "Headhunters / recruiters / VCs / founders / engineers / designers" → filter by job_title (substring) and possibly company / industry / tags. Combine with min_score_keep_in_touch ≥ 0.5 to surface "useful" ones.
@@ -36,23 +36,10 @@ const TOOLS: Anthropic.Tool[] = [
   {
     name: "search_contacts",
     description:
-      "Search the user's contacts. All filters are optional and combined with AND. By default excludes hidden (archived) contacts. Returns up to 50 contacts.",
+      "Search the user's contacts. All filters are optional and combined with AND. By default excludes archived (soft-deleted) contacts. Returns up to 50 contacts.",
     input_schema: {
       type: "object",
       properties: {
-        kind: {
-          type: "string",
-          enum: [
-            "person",
-            "newsletter",
-            "automated",
-            "noreply",
-            "spam",
-            "bulk_marketing",
-            "transactional",
-            "unknown",
-          ],
-        },
         drifting_min_days: { type: "number" },
         active_max_days: { type: "number" },
         min_message_count: { type: "number" },
@@ -76,6 +63,10 @@ const TOOLS: Anthropic.Tool[] = [
           type: "boolean",
           description: "Only return contacts that have a LinkedIn URL.",
         },
+        has_email: {
+          type: "boolean",
+          description: "Only return contacts that have an email address.",
+        },
         birthday_within_days: {
           type: "number",
           description: "Birthday (month/day) falls within the next N days (1..60).",
@@ -85,14 +76,20 @@ const TOOLS: Anthropic.Tool[] = [
         min_score_career_relevance: { type: "number" },
         min_score_industry_overlap: { type: "number" },
         is_pinned: { type: "boolean" },
-        include_hidden: {
+        include_archived: {
           type: "boolean",
           description:
-            "Default false. Set true to include archived/hidden contacts.",
+            "Default false. Set true to include archived/soft-deleted contacts.",
         },
         order_by: {
           type: "string",
-          enum: ["recent", "message_count", "name", "keep_in_touch", "career_relevance"],
+          enum: [
+            "recent",
+            "message_count",
+            "name",
+            "keep_in_touch",
+            "career_relevance",
+          ],
         },
       },
     },
@@ -112,13 +109,12 @@ const TOOLS: Anthropic.Tool[] = [
   {
     name: "stats",
     description:
-      "Return high-level totals about the user's data — counts of contacts by kind, hidden, pinned, scored, and threads.",
+      "Return high-level totals about the user's data — total contacts, archived, pinned, scored, with-LinkedIn, and threads.",
     input_schema: { type: "object", properties: {} },
   },
 ];
 
 type SearchArgs = {
-  kind?: ContactKind;
   drifting_min_days?: number;
   active_max_days?: number;
   min_message_count?: number;
@@ -129,14 +125,20 @@ type SearchArgs = {
   industry?: string;
   tags_any?: string[];
   has_linkedin?: boolean;
+  has_email?: boolean;
   birthday_within_days?: number;
   min_score_closeness?: number;
   min_score_keep_in_touch?: number;
   min_score_career_relevance?: number;
   min_score_industry_overlap?: number;
   is_pinned?: boolean;
-  include_hidden?: boolean;
-  order_by?: "recent" | "message_count" | "name" | "keep_in_touch" | "career_relevance";
+  include_archived?: boolean;
+  order_by?:
+    | "recent"
+    | "message_count"
+    | "name"
+    | "keep_in_touch"
+    | "career_relevance";
 };
 
 function birthdayWindowMatches(birthday: string | null, days: number): boolean {
@@ -147,10 +149,15 @@ function birthdayWindowMatches(birthday: string | null, days: number): boolean {
   const day = parseInt(m[3], 10);
   if (Number.isNaN(month) || Number.isNaN(day)) return false;
   const today = new Date();
-  const cur = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+  const cur = new Date(
+    Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()),
+  );
   for (let i = 0; i <= days; i += 1) {
     const candidate = new Date(cur.getTime() + i * 86_400_000);
-    if (candidate.getUTCMonth() + 1 === month && candidate.getUTCDate() === day) {
+    if (
+      candidate.getUTCMonth() + 1 === month &&
+      candidate.getUTCDate() === day
+    ) {
       return true;
     }
   }
@@ -170,13 +177,12 @@ async function runTool(
     let q = supabase
       .from("contacts")
       .select(
-        "id, email, display_name, last_interaction_at, message_count, kind, is_pinned, is_hidden, company, job_title, industry, tags, birthday, linkedin_url, score_closeness, score_keep_in_touch, score_career_relevance, score_industry_overlap, score_age_proximity",
+        "id, email, display_name, last_interaction_at, message_count, is_pinned, is_archived, company, job_title, industry, tags, birthday, linkedin_url, score_closeness, score_keep_in_touch, score_career_relevance, score_industry_overlap, score_age_proximity",
       )
       .eq("clerk_user_id", userId)
       .limit(MAX_RESULTS);
 
-    if (!args.include_hidden) q = q.eq("is_hidden", false);
-    if (args.kind) q = q.eq("kind", args.kind);
+    if (!args.include_archived) q = q.eq("is_archived", false);
     if (typeof args.is_pinned === "boolean") q = q.eq("is_pinned", args.is_pinned);
     if (typeof args.min_message_count === "number") {
       q = q.gte("message_count", args.min_message_count);
@@ -207,10 +213,16 @@ async function runTool(
     }
     if (args.has_linkedin === true) q = q.not("linkedin_url", "is", null);
     if (args.has_linkedin === false) q = q.is("linkedin_url", null);
-    if (typeof args.min_score_closeness === "number") q = q.gte("score_closeness", args.min_score_closeness);
-    if (typeof args.min_score_keep_in_touch === "number") q = q.gte("score_keep_in_touch", args.min_score_keep_in_touch);
-    if (typeof args.min_score_career_relevance === "number") q = q.gte("score_career_relevance", args.min_score_career_relevance);
-    if (typeof args.min_score_industry_overlap === "number") q = q.gte("score_industry_overlap", args.min_score_industry_overlap);
+    if (args.has_email === true) q = q.not("email", "is", null);
+    if (args.has_email === false) q = q.is("email", null);
+    if (typeof args.min_score_closeness === "number")
+      q = q.gte("score_closeness", args.min_score_closeness);
+    if (typeof args.min_score_keep_in_touch === "number")
+      q = q.gte("score_keep_in_touch", args.min_score_keep_in_touch);
+    if (typeof args.min_score_career_relevance === "number")
+      q = q.gte("score_career_relevance", args.min_score_career_relevance);
+    if (typeof args.min_score_industry_overlap === "number")
+      q = q.gte("score_industry_overlap", args.min_score_industry_overlap);
 
     switch (args.order_by) {
       case "message_count":
@@ -220,10 +232,16 @@ async function runTool(
         q = q.order("display_name", { ascending: true, nullsFirst: false });
         break;
       case "keep_in_touch":
-        q = q.order("score_keep_in_touch", { ascending: false, nullsFirst: false });
+        q = q.order("score_keep_in_touch", {
+          ascending: false,
+          nullsFirst: false,
+        });
         break;
       case "career_relevance":
-        q = q.order("score_career_relevance", { ascending: false, nullsFirst: false });
+        q = q.order("score_career_relevance", {
+          ascending: false,
+          nullsFirst: false,
+        });
         break;
       default:
         q = q.order("last_interaction_at", {
@@ -233,9 +251,13 @@ async function runTool(
     }
 
     const { data, error } = await q;
-    if (error) return JSON.stringify({ error: "db_error", message: error.message });
+    if (error)
+      return JSON.stringify({ error: "db_error", message: error.message });
     let rows = data ?? [];
-    if (typeof args.birthday_within_days === "number" && args.birthday_within_days > 0) {
+    if (
+      typeof args.birthday_within_days === "number" &&
+      args.birthday_within_days > 0
+    ) {
       const days = Math.min(60, Math.max(1, Math.round(args.birthday_within_days)));
       rows = rows.filter((r) => birthdayWindowMatches(r.birthday, days));
     }
@@ -248,7 +270,7 @@ async function runTool(
     const { data: contact } = await supabase
       .from("contacts")
       .select(
-        "id, email, display_name, last_interaction_at, message_count, kind, is_pinned, is_hidden, ai_summary, company, job_title, industry, location, linkedin_url, birthday, tags, notes, score_closeness, score_keep_in_touch, score_industry_overlap, score_age_proximity, score_career_relevance, scores_rationale",
+        "id, email, display_name, last_interaction_at, message_count, is_pinned, is_archived, ai_summary, company, job_title, industry, location, linkedin_url, birthday, tags, notes, score_closeness, score_keep_in_touch, score_industry_overlap, score_age_proximity, score_career_relevance, scores_rationale",
       )
       .eq("clerk_user_id", userId)
       .eq("id", id)
@@ -279,24 +301,43 @@ async function runTool(
 
   if (name === "stats") {
     const queries = await Promise.all([
-      supabase.from("contacts").select("*", { count: "exact", head: true }).eq("clerk_user_id", userId),
-      supabase.from("contacts").select("*", { count: "exact", head: true }).eq("clerk_user_id", userId).eq("kind", "person").eq("is_hidden", false),
-      supabase.from("contacts").select("*", { count: "exact", head: true }).eq("clerk_user_id", userId).eq("kind", "newsletter").eq("is_hidden", false),
-      supabase.from("contacts").select("*", { count: "exact", head: true }).eq("clerk_user_id", userId).eq("is_pinned", true),
-      supabase.from("contacts").select("*", { count: "exact", head: true }).eq("clerk_user_id", userId).eq("is_hidden", true),
-      supabase.from("contacts").select("*", { count: "exact", head: true }).eq("clerk_user_id", userId).not("score_closeness", "is", null),
-      supabase.from("threads").select("*", { count: "exact", head: true }).eq("clerk_user_id", userId),
-      supabase.from("contacts").select("*", { count: "exact", head: true }).eq("clerk_user_id", userId).not("linkedin_url", "is", null),
+      supabase
+        .from("contacts")
+        .select("*", { count: "exact", head: true })
+        .eq("clerk_user_id", userId)
+        .eq("is_archived", false),
+      supabase
+        .from("contacts")
+        .select("*", { count: "exact", head: true })
+        .eq("clerk_user_id", userId)
+        .eq("is_archived", true),
+      supabase
+        .from("contacts")
+        .select("*", { count: "exact", head: true })
+        .eq("clerk_user_id", userId)
+        .eq("is_pinned", true),
+      supabase
+        .from("contacts")
+        .select("*", { count: "exact", head: true })
+        .eq("clerk_user_id", userId)
+        .not("score_closeness", "is", null),
+      supabase
+        .from("contacts")
+        .select("*", { count: "exact", head: true })
+        .eq("clerk_user_id", userId)
+        .not("linkedin_url", "is", null),
+      supabase
+        .from("threads")
+        .select("*", { count: "exact", head: true })
+        .eq("clerk_user_id", userId),
     ]);
     return JSON.stringify({
       total_contacts: queries[0].count ?? 0,
-      people_visible: queries[1].count ?? 0,
-      newsletters_visible: queries[2].count ?? 0,
-      pinned: queries[3].count ?? 0,
-      hidden: queries[4].count ?? 0,
-      scored: queries[5].count ?? 0,
-      threads: queries[6].count ?? 0,
-      with_linkedin: queries[7].count ?? 0,
+      archived: queries[1].count ?? 0,
+      pinned: queries[2].count ?? 0,
+      scored: queries[3].count ?? 0,
+      with_linkedin: queries[4].count ?? 0,
+      threads: queries[5].count ?? 0,
     });
   }
 

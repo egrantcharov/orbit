@@ -1,13 +1,15 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Papa from "papaparse";
 import { toast } from "sonner";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Upload, FileText, Sparkles } from "lucide-react";
+import { Upload, FileText, Sparkles, UserPlus } from "lucide-react";
+import { AddContactModal } from "@/components/app/AddContactModal";
+import { OrphanRescueRow } from "@/components/app/OrphanRescueRow";
 import type { ImportRow } from "@/app/api/contacts/import/route";
 
 type Field = keyof ImportRow | "ignore";
@@ -56,6 +58,8 @@ function guessField(header: string): Field {
 
 export default function ImportPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const manualOpen = searchParams.get("manual") === "1";
   const [fileName, setFileName] = useState<string | null>(null);
   const [headers, setHeaders] = useState<string[]>([]);
   const [rows, setRows] = useState<Record<string, string>[]>([]);
@@ -147,20 +151,33 @@ export default function ImportPage() {
 
   return (
     <main className="px-4 sm:px-6 lg:px-10 py-6 lg:py-10 flex flex-col gap-6 max-w-4xl w-full mx-auto">
-      <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Import contacts</h1>
-        <p className="text-sm text-muted-foreground">
-          Drop a CSV — LinkedIn{" "}
-          <span className="font-medium text-foreground">Connections.csv</span>{" "}
-          works out of the box. Existing contacts are enriched in place; new
-          rows are tagged{" "}
-          <span className="font-medium text-foreground">linkedin</span>.
-        </p>
-        <p className="text-xs text-muted-foreground">
-          Note: LinkedIn&apos;s export doesn&apos;t include birthdays — add them
-          manually on each contact&apos;s page.
-        </p>
+      <div className="flex items-end justify-between gap-3 flex-wrap">
+        <div className="flex flex-col gap-1">
+          <h1 className="text-2xl font-semibold tracking-tight">Import contacts</h1>
+          <p className="text-sm text-muted-foreground">
+            Drop a CSV — LinkedIn{" "}
+            <span className="font-medium text-foreground">Connections.csv</span>{" "}
+            works out of the box. Existing contacts are enriched in place; new
+            rows are tagged{" "}
+            <span className="font-medium text-foreground">linkedin</span>.
+          </p>
+          <p className="text-xs text-muted-foreground">
+            LinkedIn&apos;s export doesn&apos;t include birthdays — add them
+            manually on each contact&apos;s page.
+          </p>
+        </div>
+        <AddContactModal
+          defaultOpen={manualOpen}
+          trigger={
+            <Button variant="outline">
+              <UserPlus className="h-4 w-4" />
+              Add manually
+            </Button>
+          }
+        />
       </div>
+
+      <OrphanRescueRow />
 
       <Card className="p-6 flex flex-col items-center gap-3 text-center border-dashed">
         <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-secondary">

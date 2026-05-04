@@ -16,21 +16,17 @@ import {
 import { Button } from "@/components/ui/button";
 import { ContactAvatar } from "@/components/ui/contact-avatar";
 import { PinButton } from "@/components/app/PinButton";
-import { ClassifyMenu } from "@/components/app/ClassifyMenu";
-import { HideButton } from "@/components/app/HideButton";
+import { ArchiveButton } from "@/components/app/ArchiveButton";
 import { formatRelativeTime } from "@/lib/format";
 import { cn, emailDomain } from "@/lib/utils";
-import type { ContactKind } from "@/lib/types/database";
-
 export type ContactRow = {
   id: string;
   email: string | null;
   display_name: string | null;
   last_interaction_at: string | null;
   message_count: number;
-  kind: ContactKind;
   is_pinned: boolean;
-  is_hidden?: boolean;
+  is_archived?: boolean;
   company?: string | null;
   job_title?: string | null;
 };
@@ -238,14 +234,9 @@ export function ContactList({ contacts }: { contacts: ContactRow[] }) {
                 </Link>
                 <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
                   <PinButton contactId={c.id} pinned={c.is_pinned} size="sm" />
-                  <HideButton
+                  <ArchiveButton
                     contactId={c.id}
-                    hidden={c.is_hidden ?? false}
-                    size="sm"
-                  />
-                  <ClassifyMenu
-                    contactId={c.id}
-                    currentKind={c.kind}
+                    archived={c.is_archived ?? false}
                     size="sm"
                   />
                 </div>

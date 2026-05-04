@@ -31,6 +31,13 @@ export default async function SettingsPage() {
       </div>
 
       <SelfProfileForm initial={profile} />
+
+      <a
+        href="/app/settings/mailboxes"
+        className="text-sm text-primary hover:underline"
+      >
+        Manage connected mailboxes →
+      </a>
     </main>
   );
 }

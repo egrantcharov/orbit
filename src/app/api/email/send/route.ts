@@ -1,7 +1,8 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse, type NextRequest } from "next/server";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
-import { sendEmail } from "@/lib/google/gmailSend";
+import { getAdapter } from "@/lib/mailbox";
+import type { MailboxProvider } from "@/lib/types/database";
 
 export const maxDuration = 30;
 
@@ -33,11 +34,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "too_long" }, { status: 400 });
   }
 
+  const supabase = createSupabaseServiceClient();
+
   let to: string | null = null;
   if (typeof body.to === "string" && body.to.includes("@")) {
     to = body.to.trim();
   } else if (typeof body.contactId === "string" && body.contactId) {
-    const supabase = createSupabaseServiceClient();
     const { data } = await supabase
       .from("contacts")
       .select("email")
@@ -50,22 +52,29 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "missing_to" }, { status: 400 });
   }
 
-  try {
-    const result = await sendEmail({
-      clerkUserId: userId,
-      to,
-      subject: body.subject,
-      body: body.body,
-    });
-    if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: 400 });
-    }
-    return NextResponse.json({ ok: true, messageId: result.messageId });
-  } catch (err) {
-    console.error("email send failed", {
-      userId,
-      msg: err instanceof Error ? err.message : String(err),
-    });
-    return NextResponse.json({ error: "send_failed" }, { status: 500 });
+  // v3: pick the user's single mailbox. Multi-mailbox arrives in v3.5; we'll
+  // surface a picker in the modal then.
+  const { data: mailbox } = await supabase
+    .from("mailbox_connections")
+    .select("id, provider")
+    .eq("clerk_user_id", userId)
+    .eq("provider", "gmail")
+    .maybeSingle();
+  if (!mailbox) {
+    return NextResponse.json({ error: "no_mailbox" }, { status: 400 });
   }
+
+  const adapter = getAdapter(mailbox.provider as MailboxProvider);
+  const result = await adapter.sendEmail({
+    clerkUserId: userId,
+    mailboxId: mailbox.id,
+    to,
+    subject: body.subject,
+    body: body.body,
+  });
+
+  if (!result.ok) {
+    return NextResponse.json({ error: result.error }, { status: 400 });
+  }
+  return NextResponse.json({ ok: true, messageId: result.messageId });
 }

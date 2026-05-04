@@ -77,7 +77,7 @@ export async function Suggestions({ userId }: { userId: string }) {
       .select("id, email, display_name, last_interaction_at, message_count")
       .eq("clerk_user_id", userId)
       .eq("kind", "person")
-      .eq("is_hidden", false)
+      .eq("is_archived", false)
       .lt("last_interaction_at", driftingCutoff)
       .gte("message_count", MIN_MESSAGES_FOR_DRIFTING)
       .order("message_count", { ascending: false })
@@ -87,7 +87,7 @@ export async function Suggestions({ userId }: { userId: string }) {
       .select("id, email, display_name, last_interaction_at, message_count")
       .eq("clerk_user_id", userId)
       .eq("kind", "person")
-      .eq("is_hidden", false)
+      .eq("is_archived", false)
       .gte("created_at", newCutoff)
       .order("message_count", { ascending: false })
       .limit(3),
@@ -96,7 +96,7 @@ export async function Suggestions({ userId }: { userId: string }) {
       .select("id, email, display_name, last_interaction_at, message_count")
       .eq("clerk_user_id", userId)
       .eq("is_pinned", true)
-      .eq("is_hidden", false)
+      .eq("is_archived", false)
       .lt("last_interaction_at", pinnedQuietCutoff)
       .order("last_interaction_at", { ascending: true, nullsFirst: true })
       .limit(3),
@@ -104,7 +104,7 @@ export async function Suggestions({ userId }: { userId: string }) {
       .from("contacts")
       .select("id, email, display_name, last_interaction_at, message_count, birthday")
       .eq("clerk_user_id", userId)
-      .eq("is_hidden", false)
+      .eq("is_archived", false)
       .not("birthday", "is", null),
   ]);
 

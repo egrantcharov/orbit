@@ -9,8 +9,8 @@ const CACHE_TTL_MS = 60 * 60 * 1000; // 1h
 
 function mondayOf(date: Date): string {
   const d = new Date(date);
-  const day = d.getUTCDay(); // 0..6 (0 = Sun)
-  const diff = (day + 6) % 7; // days since Monday
+  const day = d.getUTCDay();
+  const diff = (day + 6) % 7;
   d.setUTCDate(d.getUTCDate() - diff);
   d.setUTCHours(0, 0, 0, 0);
   return d.toISOString().slice(0, 10);
@@ -25,7 +25,6 @@ export async function POST() {
 
   const weekStart = mondayOf(new Date());
 
-  // Return cached digest if it's < 1h old.
   const { data: existing } = await supabase
     .from("digests")
     .select("body, contacts_in, threads_in, created_at, week_start")
@@ -47,88 +46,71 @@ export async function POST() {
     }
   }
 
-  // Pull bulk-mail contacts (newsletters + bulk_marketing) the user hasn't
-  // replied to. Replies signal it's a real human conversation, not a digest
-  // candidate.
-  const { data: newsletters } = await supabase
-    .from("contacts")
-    .select("id, email, display_name, kind")
-    .eq("clerk_user_id", userId)
-    .in("kind", ["newsletter", "bulk_marketing"])
-    .eq("user_replied_count", 0);
-
-  const ids = (newsletters ?? []).map((n) => n.id);
-  if (ids.length === 0) {
-    return NextResponse.json({
-      ok: true,
-      weekStart,
-      body: "_No newsletters yet. Mark a few contacts as 'newsletter' or wait for the next sync._",
-      contactsIn: 0,
-      threadsIn: 0,
-    });
-  }
-  const nameByEmail = new Map(
-    (newsletters ?? []).map((n) => [n.email ?? "", n.display_name ?? n.email ?? ""]),
-  );
-
-  // Pull threads from those contacts in the last 7 days.
-  const { data: links } = await supabase
-    .from("thread_participants")
-    .select("thread_id, contact_id")
-    .in("contact_id", ids);
-
-  const contactByThread = new Map<string, string>();
-  for (const l of links ?? []) {
-    if (!contactByThread.has(l.thread_id)) {
-      contactByThread.set(l.thread_id, l.contact_id);
-    }
-  }
-  const threadIds = Array.from(contactByThread.keys());
-  if (threadIds.length === 0) {
-    return NextResponse.json({
-      ok: true,
-      weekStart,
-      body: "_No newsletter activity yet. Try again after a few syncs._",
-      contactsIn: ids.length,
-      threadsIn: 0,
-    });
-  }
-
+  // v3: source threads directly. Bulk-mail signal = List-Unsubscribe header
+  // present + user never participated. Independent of contact classification
+  // (kind enum is deprecated).
   const cutoff = new Date(Date.now() - 7 * 86_400_000).toISOString();
   const { data: threads } = await supabase
     .from("threads")
-    .select("id, subject, body_excerpt, snippet, last_message_at")
+    .select("id, subject, body_excerpt, snippet, last_message_at, reply_to")
     .eq("clerk_user_id", userId)
-    .in("id", threadIds)
+    .eq("has_unsubscribe", true)
+    .eq("user_participated", false)
     .gte("last_message_at", cutoff)
-    .order("last_message_at", { ascending: false });
+    .not("subject", "is", null)
+    .order("last_message_at", { ascending: false })
+    .limit(100);
 
   if (!threads || threads.length === 0) {
     return NextResponse.json({
       ok: true,
       weekStart,
-      body: "_No newsletter activity in the past 7 days. Try again next week._",
-      contactsIn: ids.length,
+      body:
+        "_No newsletter activity in the past 7 days. Connect Gmail and run Enrich, then check back._",
+      contactsIn: 0,
       threadsIn: 0,
     });
   }
 
-  const contactById = new Map(
-    (newsletters ?? []).map((n) => [n.id, n.email ?? ""]),
+  // Collect "from" addresses for naming purposes via thread_participants.
+  const threadIds = threads.map((t) => t.id);
+  const { data: participantRows } = await supabase
+    .from("thread_participants")
+    .select("thread_id, contact_id, role")
+    .in("thread_id", threadIds)
+    .eq("role", "from");
+
+  const contactIds = Array.from(
+    new Set((participantRows ?? []).map((p) => p.contact_id)),
   );
+  const { data: contacts } = contactIds.length
+    ? await supabase
+        .from("contacts")
+        .select("id, email, display_name")
+        .in("id", contactIds)
+    : { data: [] };
+  const contactById = new Map(
+    (contacts ?? []).map((c) => [c.id, c.display_name ?? c.email ?? ""]),
+  );
+  const fromByThread = new Map<string, string>();
+  for (const p of participantRows ?? []) {
+    if (!fromByThread.has(p.thread_id)) {
+      const name = contactById.get(p.contact_id);
+      if (name) fromByThread.set(p.thread_id, name);
+    }
+  }
+
   const items: DigestItem[] = threads
     .filter((t) => t.last_message_at && t.subject)
-    .map((t) => {
-      const contactId = contactByThread.get(t.id);
-      const contactEmail = contactId ? contactById.get(contactId) ?? "" : "";
-      const fromName = contactEmail ? nameByEmail.get(contactEmail) ?? contactEmail : "";
-      return {
-        from: fromName,
-        subject: t.subject!,
-        body: t.body_excerpt ?? t.snippet ?? null,
-        date: t.last_message_at!,
-      };
-    });
+    .map((t) => ({
+      from:
+        fromByThread.get(t.id) ?? t.reply_to ?? "(unknown sender)",
+      subject: t.subject!,
+      body: t.body_excerpt ?? t.snippet ?? null,
+      date: t.last_message_at!,
+    }));
+
+  const distinctSenders = new Set(items.map((it) => it.from)).size;
 
   try {
     const body = await weeklyDigest(items);
@@ -138,7 +120,7 @@ export async function POST() {
         clerk_user_id: userId,
         week_start: weekStart,
         body,
-        contacts_in: ids.length,
+        contacts_in: distinctSenders,
         threads_in: items.length,
         created_at: new Date().toISOString(),
       },
@@ -149,7 +131,7 @@ export async function POST() {
       ok: true,
       weekStart,
       body,
-      contactsIn: ids.length,
+      contactsIn: distinctSenders,
       threadsIn: items.length,
     });
   } catch (err) {

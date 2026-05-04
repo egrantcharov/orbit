@@ -7,8 +7,14 @@ import { AppNav } from "@/components/app/AppNav";
 export function AppHeader({
   connection,
 }: {
-  connection: { google_email: string; last_sync_at: string | null } | null;
+  connection: {
+    account_email?: string | null;
+    google_email?: string | null;
+    last_sync_at: string | null;
+  } | null;
 }) {
+  const accountEmail =
+    connection?.account_email ?? connection?.google_email ?? null;
   return (
     <header className="sticky top-0 z-30 border-b bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="px-4 sm:px-6 lg:px-10 h-14 flex items-center justify-between gap-4">
@@ -23,7 +29,7 @@ export function AppHeader({
             lastSyncAt={connection?.last_sync_at ?? null}
             connected={!!connection}
           />
-          <UserMenu googleEmail={connection?.google_email ?? null} />
+          <UserMenu googleEmail={accountEmail} />
         </div>
       </div>
     </header>

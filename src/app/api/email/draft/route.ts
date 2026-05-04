@@ -36,8 +36,8 @@ export async function POST(req: NextRequest) {
       .eq("id", body.contactId)
       .maybeSingle(),
     supabase
-      .from("google_connections")
-      .select("google_email")
+      .from("mailbox_connections")
+      .select("account_email, google_email")
       .eq("clerk_user_id", userId)
       .maybeSingle(),
     currentUser(),
@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
   try {
     const draft = await draftEmail({
       fromName: clerkUser?.fullName ?? clerkUser?.firstName ?? null,
-      fromEmail: connection?.google_email ?? null,
+      fromEmail: connection?.account_email ?? connection?.google_email ?? null,
       contactName: contact.display_name,
       contactEmail: contact.email,
       contactCompany: contact.company,

@@ -1,8 +1,13 @@
 /**
  * Hand-written database types. Keep in sync with supabase/migrations/.
  * Run `supabase gen types typescript` once the project is linked to autogen.
+ *
+ * v3 (CSV-first): contacts are owned by the user; mailbox_connections are
+ * pluggable per-provider. The v2 `kind`/`is_hidden` columns are deprecated
+ * but still present in the schema until migration 0007 drops them.
  */
 
+// `kind` is deprecated in v3 — kept for read-back of legacy rows only.
 export type ContactKind =
   | "person"
   | "newsletter"
@@ -24,7 +29,16 @@ export const CONTACT_KINDS: ContactKind[] = [
   "unknown",
 ];
 
-export type ContactSource = "gmail" | "linkedin" | "manual";
+export type ContactSource = "gmail" | "linkedin" | "manual" | "csv";
+
+export type MailboxProvider = "gmail" | "outlook";
+
+export type EnrichmentStatus =
+  | "idle"
+  | "running"
+  | "done"
+  | "error"
+  | "skipped";
 
 export type BookmarkKind =
   | "github"
@@ -44,7 +58,7 @@ export const BOOKMARK_KINDS: BookmarkKind[] = [
 export type SelfProfile = {
   industry?: string | null;
   role?: string | null;
-  age_bracket?: string | null; // e.g. "20s", "30s", "40s"
+  age_bracket?: string | null;
   location?: string | null;
 };
 
@@ -75,9 +89,13 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["app_users"]["Insert"]>;
         Relationships: [];
       };
-      google_connections: {
+      mailbox_connections: {
         Row: {
+          id: string;
           clerk_user_id: string;
+          provider: MailboxProvider;
+          account_email: string;
+          // Legacy column from v1 — still populated, redundant with account_email.
           google_email: string;
           refresh_token_encrypted: string;
           access_token: string | null;
@@ -88,7 +106,10 @@ export type Database = {
           updated_at: string;
         };
         Insert: {
+          id?: string;
           clerk_user_id: string;
+          provider?: MailboxProvider;
+          account_email: string;
           google_email: string;
           refresh_token_encrypted: string;
           access_token?: string | null;
@@ -97,7 +118,7 @@ export type Database = {
           last_sync_at?: string | null;
         };
         Update: Partial<
-          Database["public"]["Tables"]["google_connections"]["Insert"]
+          Database["public"]["Tables"]["mailbox_connections"]["Insert"]
         >;
         Relationships: [];
       };
@@ -110,15 +131,17 @@ export type Database = {
           last_interaction_at: string | null;
           message_count: number;
           created_at: string;
+          // Deprecated v2 fields — present in schema, ignored by v3 code.
           kind: ContactKind;
           kind_reason: string | null;
           kind_locked: boolean;
+          is_hidden: boolean;
+          hidden_reason: string | null;
+          // v2 fields kept by v3
           is_pinned: boolean;
           ai_summary: string | null;
           ai_summary_at: string | null;
           source: ContactSource;
-          is_hidden: boolean;
-          hidden_reason: string | null;
           linkedin_url: string | null;
           company: string | null;
           job_title: string | null;
@@ -136,6 +159,8 @@ export type Database = {
           score_career_relevance: number | null;
           scores_rationale: ScoresRationale | null;
           scores_at: string | null;
+          // v3 new
+          is_archived: boolean;
         };
         Insert: {
           id?: string;
@@ -148,11 +173,11 @@ export type Database = {
           kind_reason?: string | null;
           kind_locked?: boolean;
           is_pinned?: boolean;
+          is_hidden?: boolean;
+          hidden_reason?: string | null;
           ai_summary?: string | null;
           ai_summary_at?: string | null;
           source?: ContactSource;
-          is_hidden?: boolean;
-          hidden_reason?: string | null;
           linkedin_url?: string | null;
           company?: string | null;
           job_title?: string | null;
@@ -170,6 +195,7 @@ export type Database = {
           score_career_relevance?: number | null;
           scores_rationale?: ScoresRationale | null;
           scores_at?: string | null;
+          is_archived?: boolean;
         };
         Update: Partial<Database["public"]["Tables"]["contacts"]["Insert"]>;
         Relationships: [];
@@ -178,6 +204,9 @@ export type Database = {
         Row: {
           id: string;
           clerk_user_id: string;
+          mailbox_id: string | null;
+          provider_thread_id: string | null;
+          // Legacy column — redundant with provider_thread_id.
           gmail_thread_id: string;
           subject: string | null;
           snippet: string | null;
@@ -187,10 +216,13 @@ export type Database = {
           has_unsubscribe: boolean;
           reply_to: string | null;
           user_participated: boolean;
+          content_hash: string | null;
         };
         Insert: {
           id?: string;
           clerk_user_id: string;
+          mailbox_id?: string | null;
+          provider_thread_id?: string | null;
           gmail_thread_id: string;
           subject?: string | null;
           snippet?: string | null;
@@ -199,6 +231,7 @@ export type Database = {
           has_unsubscribe?: boolean;
           reply_to?: string | null;
           user_participated?: boolean;
+          content_hash?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["threads"]["Insert"]>;
         Relationships: [];
@@ -216,6 +249,30 @@ export type Database = {
         };
         Update: Partial<
           Database["public"]["Tables"]["thread_participants"]["Insert"]
+        >;
+        Relationships: [];
+      };
+      enrichment_state: {
+        Row: {
+          clerk_user_id: string;
+          mailbox_id: string;
+          contact_id: string;
+          status: EnrichmentStatus;
+          threads_found: number;
+          last_run_at: string | null;
+          error_message: string | null;
+        };
+        Insert: {
+          clerk_user_id: string;
+          mailbox_id: string;
+          contact_id: string;
+          status?: EnrichmentStatus;
+          threads_found?: number;
+          last_run_at?: string | null;
+          error_message?: string | null;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["enrichment_state"]["Insert"]
         >;
         Relationships: [];
       };

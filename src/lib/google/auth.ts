@@ -3,18 +3,28 @@ import { decryptToken, encryptToken } from "@/lib/crypto";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import type { Database } from "@/lib/types/database";
 
-// Shared OAuth client builder used by sync, send, calendar, etc. Throws if
-// the user has no Google connection. Persists rotated credentials so we
-// don't pay the refresh cost on every call.
-export async function getAuthClient(clerkUserId: string) {
+// v3 single-mailbox-per-user assertion: if a user ever ends up with
+// multiple mailbox_connections rows, we need to take an explicit mailboxId.
+// For now we surface the row's id so callers can persist mailbox_id on
+// derived rows (threads, enrichment_state, etc.).
+export async function getAuthClient(
+  clerkUserId: string,
+  mailboxId?: string,
+) {
   const supabase = createSupabaseServiceClient();
-  const { data, error } = await supabase
-    .from("google_connections")
+  let query = supabase
+    .from("mailbox_connections")
     .select("*")
     .eq("clerk_user_id", clerkUserId)
-    .single();
+    .eq("provider", "gmail");
+
+  if (mailboxId) {
+    query = query.eq("id", mailboxId);
+  }
+
+  const { data, error } = await query.maybeSingle();
   if (error || !data) {
-    throw new Error("No Google connection for user");
+    throw new Error("No Gmail connection for user");
   }
 
   const oauth2 = createOAuth2Client();
@@ -28,7 +38,7 @@ export async function getAuthClient(clerkUserId: string) {
   });
 
   oauth2.on("tokens", async (tokens) => {
-    const update: Database["public"]["Tables"]["google_connections"]["Update"] = {};
+    const update: Database["public"]["Tables"]["mailbox_connections"]["Update"] = {};
     if (tokens.access_token) update.access_token = tokens.access_token;
     if (tokens.expiry_date) {
       update.access_token_expires_at = new Date(tokens.expiry_date).toISOString();
@@ -38,15 +48,16 @@ export async function getAuthClient(clerkUserId: string) {
     }
     if (Object.keys(update).length > 0) {
       await supabase
-        .from("google_connections")
+        .from("mailbox_connections")
         .update(update)
-        .eq("clerk_user_id", clerkUserId);
+        .eq("id", data.id);
     }
   });
 
   return {
     oauth2,
-    googleEmail: data.google_email,
+    googleEmail: data.account_email ?? data.google_email,
     scopes: data.scopes ?? [],
+    mailboxId: data.id,
   };
 }

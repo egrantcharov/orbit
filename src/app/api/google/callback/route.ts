@@ -68,21 +68,39 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const { error: connErr } = await supabase.from("google_connections").upsert(
-    {
-      clerk_user_id: userId,
-      google_email: googleEmail,
-      refresh_token_encrypted: encryptToken(refresh_token),
-      access_token: access_token ?? null,
-      access_token_expires_at: expiry_date
-        ? new Date(expiry_date).toISOString()
-        : null,
-      scopes: scope ? scope.split(" ") : [],
-    },
-    { onConflict: "clerk_user_id" },
-  );
+  // v3: try to update an existing row first (single-mailbox-per-user
+  // assertion). If none exists yet, insert. Avoids a unique-constraint
+  // collision on the partial (clerk_user_id, provider, lower(account_email))
+  // index when the user reconnects with a different google account.
+  const { data: existing } = await supabase
+    .from("mailbox_connections")
+    .select("id")
+    .eq("clerk_user_id", userId)
+    .eq("provider", "gmail")
+    .maybeSingle();
+
+  const connectionPayload = {
+    clerk_user_id: userId,
+    provider: "gmail" as const,
+    account_email: googleEmail,
+    google_email: googleEmail,
+    refresh_token_encrypted: encryptToken(refresh_token),
+    access_token: access_token ?? null,
+    access_token_expires_at: expiry_date
+      ? new Date(expiry_date).toISOString()
+      : null,
+    scopes: scope ? scope.split(" ") : [],
+  };
+
+  const { error: connErr } = existing
+    ? await supabase
+        .from("mailbox_connections")
+        .update(connectionPayload)
+        .eq("id", existing.id)
+    : await supabase.from("mailbox_connections").insert(connectionPayload);
+
   if (connErr) {
-    console.error("Failed to upsert google_connection", connErr);
+    console.error("Failed to upsert mailbox_connection", connErr);
     return NextResponse.redirect(
       new URL("/app?google_error=db_conn", req.url),
     );
