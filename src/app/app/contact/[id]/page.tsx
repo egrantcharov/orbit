@@ -28,6 +28,8 @@ import { ContactProfileEditor } from "@/components/app/ContactProfileEditor";
 import { EmailComposeModal } from "@/components/app/EmailComposeModal";
 import { ScheduleEventModal } from "@/components/app/ScheduleEventModal";
 import { EnrichButton } from "@/components/app/EnrichButton";
+import { LogInteractionModal } from "@/components/app/LogInteractionModal";
+import { InteractionsTimeline } from "@/components/app/InteractionsTimeline";
 
 export const dynamic = "force-dynamic";
 
@@ -269,6 +271,10 @@ export default async function ContactDetail({
             contactName={contact.display_name}
           />
           <EnrichButton contactId={contact.id} hasEmail={!!contact.email} />
+          <LogInteractionModal
+            contactId={contact.id}
+            contactName={contact.display_name}
+          />
         </div>
       </Card>
 
@@ -291,6 +297,8 @@ export default async function ContactDetail({
         initialSummary={contact.ai_summary}
         initialSummaryAt={contact.ai_summary_at}
       />
+
+      <InteractionsTimeline clerkUserId={userId} contactId={contact.id} />
 
       <ContactProfileEditor
         contactId={contact.id}

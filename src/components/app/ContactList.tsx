@@ -29,6 +29,8 @@ export type ContactRow = {
   is_archived?: boolean;
   company?: string | null;
   job_title?: string | null;
+  score_keep_in_touch?: number | null;
+  score_career_relevance?: number | null;
 };
 
 type Sort = "recent" | "count" | "name" | "name_desc";
@@ -224,12 +226,17 @@ export function ContactList({ contacts }: { contacts: ContactRow[] }) {
                       </span>
                     ) : null}
                   </div>
-                  <div className="flex flex-col items-end gap-0.5 text-xs text-muted-foreground shrink-0 mr-2">
-                    <span>{formatRelativeTime(c.last_interaction_at)}</span>
-                    <span>
-                      {c.message_count.toLocaleString()}{" "}
-                      {c.message_count === 1 ? "msg" : "msgs"}
-                    </span>
+                  <div className="flex items-center gap-2 shrink-0 mr-2">
+                    {c.score_keep_in_touch != null && (
+                      <ScoreChip value={c.score_keep_in_touch} label="K2T" />
+                    )}
+                    <div className="flex flex-col items-end gap-0.5 text-xs text-muted-foreground">
+                      <span>{formatRelativeTime(c.last_interaction_at)}</span>
+                      <span>
+                        {c.message_count.toLocaleString()}{" "}
+                        {c.message_count === 1 ? "msg" : "msgs"}
+                      </span>
+                    </div>
                   </div>
                 </Link>
                 <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
@@ -251,5 +258,26 @@ export function ContactList({ contacts }: { contacts: ContactRow[] }) {
         {contacts.length.toLocaleString()} contacts.
       </p>
     </div>
+  );
+}
+
+function ScoreChip({ value, label }: { value: number; label: string }) {
+  const pct = Math.round(value * 100);
+  const tone =
+    pct >= 70
+      ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+      : pct >= 40
+        ? "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
+        : "bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300";
+  return (
+    <span
+      className={cn(
+        "hidden sm:inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium tabular-nums",
+        tone,
+      )}
+      title={`Keep-in-touch score: ${pct}/100`}
+    >
+      {label} {pct}
+    </span>
   );
 }

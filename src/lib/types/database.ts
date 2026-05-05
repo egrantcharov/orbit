@@ -45,6 +45,53 @@ export type EnrichmentStatus =
   | "error"
   | "skipped";
 
+export type InteractionKind =
+  | "email_thread"
+  | "calendar_event"
+  | "note"
+  | "voice_memo"
+  | "phone"
+  | "imessage";
+
+export type BriefingKind = "today" | "meeting";
+
+export type TodayBriefingCard = {
+  id: string;
+  kind:
+    | "drifting"
+    | "birthday"
+    | "unanswered"
+    | "upcoming_meeting"
+    | "scheduled_followup"
+    | "general";
+  contactId?: string | null;
+  contactName?: string | null;
+  contactEmail?: string | null;
+  headline: string;
+  reason: string;
+  action: {
+    type: "email" | "schedule" | "open_brief" | "open_contact" | "external";
+    label: string;
+    href?: string;
+    suggestedSubject?: string;
+    intent?: string;
+  };
+};
+
+export type TodayBriefingBody = {
+  generatedAt: string;
+  cards: TodayBriefingCard[];
+};
+
+export type MeetingBriefingBody = {
+  eventId: string;
+  eventSummary: string;
+  startISO: string;
+  attendees: Array<{ email: string; displayName: string | null; contactId?: string | null }>;
+  brief: string; // markdown
+  talkingPoints: string[];
+};
+
 export type BookmarkKind =
   | "github"
   | "newsletter"
@@ -287,6 +334,55 @@ export type Database = {
         Update: Partial<
           Database["public"]["Tables"]["enrichment_state"]["Insert"]
         >;
+        Relationships: [];
+      };
+      interactions: {
+        Row: {
+          id: string;
+          clerk_user_id: string;
+          contact_id: string;
+          kind: InteractionKind;
+          occurred_at: string;
+          title: string | null;
+          body: string | null;
+          source_id: string | null;
+          source_url: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          clerk_user_id: string;
+          contact_id: string;
+          kind: InteractionKind;
+          occurred_at?: string;
+          title?: string | null;
+          body?: string | null;
+          source_id?: string | null;
+          source_url?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["interactions"]["Insert"]>;
+        Relationships: [];
+      };
+      briefings: {
+        Row: {
+          id: string;
+          clerk_user_id: string;
+          kind: BriefingKind;
+          ref_id: string | null;
+          body: TodayBriefingBody | MeetingBriefingBody;
+          generated_at: string;
+          expires_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          clerk_user_id: string;
+          kind: BriefingKind;
+          ref_id?: string | null;
+          body: TodayBriefingBody | MeetingBriefingBody;
+          generated_at?: string;
+          expires_at?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["briefings"]["Insert"]>;
         Relationships: [];
       };
       bookmarks: {

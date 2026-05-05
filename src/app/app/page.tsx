@@ -13,6 +13,7 @@ import { ConnectGoogleEmpty } from "@/components/app/EmptyState";
 import { Suggestions } from "@/components/app/Suggestions";
 import { AskOrbit } from "@/components/app/AskOrbit";
 import { ReconnectGooglePrompt } from "@/components/app/ReconnectGooglePrompt";
+import { TodaySection } from "@/components/app/TodaySection";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -127,7 +128,7 @@ export default async function AppHome({
   let q = supabase
     .from("contacts")
     .select(
-      "id, email, display_name, last_interaction_at, message_count, is_pinned, is_archived, company, job_title",
+      "id, email, display_name, last_interaction_at, message_count, is_pinned, is_archived, company, job_title, score_keep_in_touch, score_career_relevance",
     )
     .eq("clerk_user_id", userId)
     .order("is_pinned", { ascending: false })
@@ -195,6 +196,10 @@ export default async function AppHome({
         lastSyncAt={connection?.last_sync_at ?? null}
         topContactName={top?.display_name ?? top?.email ?? null}
         topContactCount={top?.message_count ?? 0}
+      />
+
+      <TodaySection
+        fromEmail={connection?.account_email ?? connection?.google_email ?? null}
       />
 
       <AskOrbit />
