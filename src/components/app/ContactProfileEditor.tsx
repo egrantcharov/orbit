@@ -13,6 +13,9 @@ export type ContactProfile = {
   company: string | null;
   job_title: string | null;
   industry: string | null;
+  sector: string | null;
+  team: string | null;
+  school: string | null;
   location: string | null;
   birthday: string | null;
   linkedin_url: string | null;
@@ -39,6 +42,9 @@ export function ContactProfileEditor({
   const [company, setCompany] = useState(initial.company ?? "");
   const [jobTitle, setJobTitle] = useState(initial.job_title ?? "");
   const [industry, setIndustry] = useState(initial.industry ?? "");
+  const [sector, setSector] = useState(initial.sector ?? "");
+  const [team, setTeam] = useState(initial.team ?? "");
+  const [school, setSchool] = useState(initial.school ?? "");
   const [location, setLocation] = useState(initial.location ?? "");
   const [birthday, setBirthday] = useState(initial.birthday ?? "");
   const [linkedin, setLinkedin] = useState(initial.linkedin_url ?? "");
@@ -76,6 +82,9 @@ export function ContactProfileEditor({
           company: company.trim() || null,
           job_title: jobTitle.trim() || null,
           industry: industry.trim() || null,
+          sector: sector.trim() || null,
+          team: team.trim() || null,
+          school: school.trim() || null,
           location: location.trim() || null,
           birthday: birthday.trim() || null,
           linkedin_url: linkedin.trim() || null,
@@ -102,7 +111,10 @@ export function ContactProfileEditor({
     const summary: Array<[string, string | null]> = [
       ["Company", initial.company],
       ["Title", initial.job_title],
+      ["Team / Group", initial.team],
       ["Industry", initial.industry],
+      ["Sector", initial.sector],
+      ["School", initial.school],
       ["Location", initial.location],
       ["Birthday", initial.birthday],
       ["Met at", initial.met_at],
@@ -196,13 +208,22 @@ export function ContactProfileEditor({
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Field label="Company">
-          <Input value={company} onChange={(e) => setCompany(e.target.value)} />
+          <Input value={company} onChange={(e) => setCompany(e.target.value)} placeholder="Goldman Sachs" />
         </Field>
         <Field label="Title">
-          <Input value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} />
+          <Input value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} placeholder="Investment Banking Analyst" />
+        </Field>
+        <Field label="Team / Group">
+          <Input value={team} onChange={(e) => setTeam(e.target.value)} placeholder="TMT Group" />
+        </Field>
+        <Field label="School">
+          <Input value={school} onChange={(e) => setSchool(e.target.value)} placeholder="University of Chicago" />
         </Field>
         <Field label="Industry">
-          <Input value={industry} onChange={(e) => setIndustry(e.target.value)} />
+          <Input value={industry} onChange={(e) => setIndustry(e.target.value)} placeholder="Finance" />
+        </Field>
+        <Field label="Sector">
+          <Input value={sector} onChange={(e) => setSector(e.target.value)} placeholder="Investment Banking" />
         </Field>
         <Field label="Location">
           <Input value={location} onChange={(e) => setLocation(e.target.value)} />

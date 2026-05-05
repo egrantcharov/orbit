@@ -13,6 +13,9 @@ export type ImportRow = {
   company?: string | null;
   job_title?: string | null;
   industry?: string | null;
+  sector?: string | null;
+  team?: string | null;
+  school?: string | null;
   location?: string | null;
   linkedin_url?: string | null;
   birthday?: string | null; // yyyy-mm-dd

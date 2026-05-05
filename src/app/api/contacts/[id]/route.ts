@@ -95,6 +95,9 @@ export async function PATCH(
     "company",
     "job_title",
     "industry",
+    "sector",
+    "team",
+    "school",
     "location",
     "linkedin_url",
     "notes",
@@ -144,7 +147,7 @@ export async function PATCH(
     .eq("clerk_user_id", userId)
     .eq("id", id)
     .select(
-      "id, is_pinned, is_archived, company, job_title, industry, location, birthday, linkedin_url, tags, notes, met_at, met_on, met_via, interests",
+      "id, is_pinned, is_archived, company, job_title, industry, sector, team, school, location, birthday, linkedin_url, tags, notes, met_at, met_on, met_via, interests",
     )
     .maybeSingle();
 

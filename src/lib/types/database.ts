@@ -206,6 +206,9 @@ export type Database = {
           met_on: string | null;
           met_via: string | null;
           interests: string | null;
+          sector: string | null;
+          team: string | null;
+          school: string | null;
           user_sent_count: number;
           user_replied_count: number;
           score_closeness: number | null;
@@ -246,6 +249,9 @@ export type Database = {
           met_on?: string | null;
           met_via?: string | null;
           interests?: string | null;
+          sector?: string | null;
+          team?: string | null;
+          school?: string | null;
           user_sent_count?: number;
           user_replied_count?: number;
           score_closeness?: number | null;

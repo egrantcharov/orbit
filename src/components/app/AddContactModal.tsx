@@ -32,6 +32,10 @@ export function AddContactModal({
   const [email, setEmail] = useState("");
   const [company, setCompany] = useState("");
   const [jobTitle, setJobTitle] = useState("");
+  const [team, setTeam] = useState("");
+  const [industry, setIndustry] = useState("");
+  const [sector, setSector] = useState("");
+  const [school, setSchool] = useState("");
   const [linkedin, setLinkedin] = useState("");
   const [location, setLocation] = useState("");
   const [birthday, setBirthday] = useState("");
@@ -46,6 +50,10 @@ export function AddContactModal({
     setEmail("");
     setCompany("");
     setJobTitle("");
+    setTeam("");
+    setIndustry("");
+    setSector("");
+    setSchool("");
     setLinkedin("");
     setLocation("");
     setBirthday("");
@@ -74,6 +82,10 @@ export function AddContactModal({
           email: email.trim() || null,
           company: company.trim() || null,
           job_title: jobTitle.trim() || null,
+          team: team.trim() || null,
+          industry: industry.trim() || null,
+          sector: sector.trim() || null,
+          school: school.trim() || null,
           linkedin_url: linkedin.trim() || null,
           location: location.trim() || null,
           birthday: birthday.trim() || null,
@@ -141,14 +153,42 @@ export function AddContactModal({
               <Input
                 value={company}
                 onChange={(e) => setCompany(e.target.value)}
-                placeholder="Acme"
+                placeholder="Goldman Sachs"
               />
             </Field>
             <Field label="Title">
               <Input
                 value={jobTitle}
                 onChange={(e) => setJobTitle(e.target.value)}
-                placeholder="Engineer"
+                placeholder="Investment Banking Analyst"
+              />
+            </Field>
+            <Field label="Team / Group">
+              <Input
+                value={team}
+                onChange={(e) => setTeam(e.target.value)}
+                placeholder="TMT Group"
+              />
+            </Field>
+            <Field label="School">
+              <Input
+                value={school}
+                onChange={(e) => setSchool(e.target.value)}
+                placeholder="University of Chicago"
+              />
+            </Field>
+            <Field label="Industry">
+              <Input
+                value={industry}
+                onChange={(e) => setIndustry(e.target.value)}
+                placeholder="Finance"
+              />
+            </Field>
+            <Field label="Sector">
+              <Input
+                value={sector}
+                onChange={(e) => setSector(e.target.value)}
+                placeholder="Investment Banking"
               />
             </Field>
           </div>
