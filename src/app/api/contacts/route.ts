@@ -73,6 +73,17 @@ export async function POST(req: NextRequest) {
     company: clean(body.company),
     job_title: clean(body.job_title),
     linkedin_url: clean(body.linkedin_url, 500),
+    location: clean(body.location),
+    met_at: clean(body.met_at),
+    met_via: clean(body.met_via),
+    interests: clean(body.interests, 4000),
+    notes: clean(body.notes, 4000),
+    birthday: typeof body.birthday === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.birthday)
+      ? body.birthday
+      : null,
+    met_on: typeof body.met_on === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.met_on)
+      ? body.met_on
+      : null,
     source: "manual",
     is_archived: false,
     kind_locked: true,

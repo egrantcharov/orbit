@@ -68,21 +68,73 @@ export default function ImportPage() {
 
   function onFile(file: File) {
     setFileName(file.name);
-    Papa.parse<Record<string, string>>(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete(res) {
-        const hdrs = (res.meta.fields ?? []).filter(Boolean);
-        const m: Record<string, Field> = {};
-        for (const h of hdrs) m[h] = guessField(h);
-        setHeaders(hdrs);
-        setRows(res.data);
-        setMapping(m);
-      },
-      error(err) {
-        toast.error("CSV parse failed: " + err.message);
-      },
-    });
+    setHeaders([]);
+    setRows([]);
+    setMapping({});
+    // LinkedIn's Connections.csv ships with a "Notes:" preamble of 3 blank
+    // lines + a comment block before the real header row. Papa's
+    // `header:true` parses the first non-empty line as the header — which
+    // for the LinkedIn file is the "Notes:" preamble, NOT the real columns.
+    // Fix: read as text first, strip leading lines until we find one that
+    // contains common column names, then parse from there.
+    const reader = new FileReader();
+    reader.onload = () => {
+      const raw = String(reader.result ?? "");
+      const text = stripLinkedInPreamble(raw);
+      Papa.parse<Record<string, string>>(text, {
+        header: true,
+        skipEmptyLines: "greedy",
+        complete(res) {
+          const hdrs = (res.meta.fields ?? []).filter(
+            (h): h is string => !!h && h.trim().length > 0,
+          );
+          if (hdrs.length === 0) {
+            toast.error(
+              "CSV parsed but no header row found. First line should list column names.",
+            );
+            return;
+          }
+          if (res.errors && res.errors.length > 0) {
+            // Non-fatal — papaparse warns on ragged rows etc. Surface but
+            // continue.
+            console.warn("CSV parse warnings", res.errors.slice(0, 5));
+          }
+          const m: Record<string, Field> = {};
+          for (const h of hdrs) m[h] = guessField(h);
+          setHeaders(hdrs);
+          setRows(res.data);
+          setMapping(m);
+          toast.success(
+            `Parsed ${res.data.length} rows · ${hdrs.length} columns`,
+          );
+        },
+        error(err: Error) {
+          toast.error("CSV parse failed: " + err.message);
+        },
+      });
+    };
+    reader.onerror = () =>
+      toast.error("Could not read file: " + (reader.error?.message ?? "unknown"));
+    reader.readAsText(file);
+  }
+
+  function stripLinkedInPreamble(raw: string): string {
+    const lines = raw.split(/\r?\n/);
+    // Look for the first line that contains 3+ comma-separated tokens AND
+    // mentions a known column name. Otherwise return as-is.
+    for (let i = 0; i < Math.min(lines.length, 20); i += 1) {
+      const line = lines[i];
+      const lower = line.toLowerCase();
+      const hasCols =
+        lower.includes("first name") ||
+        lower.includes("email address") ||
+        lower.includes("linkedin url") ||
+        lower.includes("connected on");
+      if (hasCols && line.split(",").length >= 3) {
+        return lines.slice(i).join("\n");
+      }
+    }
+    return raw;
   }
 
   const previewRows = useMemo(() => rows.slice(0, 5), [rows]);
@@ -130,7 +182,13 @@ export default function ImportPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ rows: slice }),
         });
-        if (!res.ok) throw new Error(`Import failed (${res.status})`);
+        if (!res.ok) {
+          const body = (await res.json().catch(() => ({}))) as { error?: string };
+          const msg = body.error
+            ? `Import failed: ${body.error} (HTTP ${res.status})`
+            : `Import failed (HTTP ${res.status})`;
+          throw new Error(msg);
+        }
         const j = (await res.json()) as { created?: number; enriched?: number; skipped?: number };
         created += j.created ?? 0;
         enriched += j.enriched ?? 0;

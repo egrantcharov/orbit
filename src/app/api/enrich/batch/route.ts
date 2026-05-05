@@ -324,7 +324,7 @@ async function persistThreads(
       clerk_user_id: clerkUserId,
       email: e,
       display_name: nameByEmail.get(e) ?? null,
-      source: "gmail",
+      source: "enrichment_stub",
       is_archived: true, // hidden until user explicitly adopts
     }));
     await supabase

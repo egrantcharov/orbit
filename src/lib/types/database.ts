@@ -29,7 +29,12 @@ export const CONTACT_KINDS: ContactKind[] = [
   "unknown",
 ];
 
-export type ContactSource = "gmail" | "linkedin" | "manual" | "csv";
+export type ContactSource =
+  | "gmail"
+  | "linkedin"
+  | "manual"
+  | "csv"
+  | "enrichment_stub";
 
 export type MailboxProvider = "gmail" | "outlook";
 
@@ -150,6 +155,10 @@ export type Database = {
           birthday: string | null;
           tags: string[];
           notes: string | null;
+          met_at: string | null;
+          met_on: string | null;
+          met_via: string | null;
+          interests: string | null;
           user_sent_count: number;
           user_replied_count: number;
           score_closeness: number | null;
@@ -186,6 +195,10 @@ export type Database = {
           birthday?: string | null;
           tags?: string[];
           notes?: string | null;
+          met_at?: string | null;
+          met_on?: string | null;
+          met_via?: string | null;
+          interests?: string | null;
           user_sent_count?: number;
           user_replied_count?: number;
           score_closeness?: number | null;

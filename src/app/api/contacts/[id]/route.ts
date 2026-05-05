@@ -98,11 +98,23 @@ export async function PATCH(
     "location",
     "linkedin_url",
     "notes",
+    "met_at",
+    "met_via",
+    "interests",
   ] as const) {
     if (body[field] !== undefined) {
-      const v = asNullableTrimmedString(body[field], field === "notes" ? 4000 : 200);
+      const longField = field === "notes" || field === "interests";
+      const v = asNullableTrimmedString(body[field], longField ? 4000 : 200);
       if (v !== undefined) update[field] = v;
     }
+  }
+
+  if (body.met_on !== undefined) {
+    const v = asISODate(body.met_on);
+    if (v === undefined && body.met_on !== null) {
+      return NextResponse.json({ error: "invalid_met_on" }, { status: 400 });
+    }
+    update.met_on = v ?? null;
   }
 
   if (body.birthday !== undefined) {
@@ -132,7 +144,7 @@ export async function PATCH(
     .eq("clerk_user_id", userId)
     .eq("id", id)
     .select(
-      "id, is_pinned, is_archived, company, job_title, industry, location, birthday, linkedin_url, tags, notes",
+      "id, is_pinned, is_archived, company, job_title, industry, location, birthday, linkedin_url, tags, notes, met_at, met_on, met_via, interests",
     )
     .maybeSingle();
 

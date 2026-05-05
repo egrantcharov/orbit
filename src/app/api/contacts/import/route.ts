@@ -184,6 +184,12 @@ export async function POST(req: NextRequest) {
         birthday: r.birthday,
         tags: baseTags,
         last_interaction_at: lastInteraction,
+        met_on: r.connected_on
+          ? (Date.parse(r.connected_on) && !Number.isNaN(Date.parse(r.connected_on))
+              ? new Date(r.connected_on).toISOString().slice(0, 10)
+              : null)
+          : null,
+        met_via: "LinkedIn connection",
       });
       created++;
       continue;

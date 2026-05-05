@@ -18,6 +18,10 @@ export type ContactProfile = {
   linkedin_url: string | null;
   tags: string[];
   notes: string | null;
+  met_at: string | null;
+  met_on: string | null;
+  met_via: string | null;
+  interests: string | null;
 };
 
 export function ContactProfileEditor({
@@ -38,6 +42,10 @@ export function ContactProfileEditor({
   const [location, setLocation] = useState(initial.location ?? "");
   const [birthday, setBirthday] = useState(initial.birthday ?? "");
   const [linkedin, setLinkedin] = useState(initial.linkedin_url ?? "");
+  const [metAt, setMetAt] = useState(initial.met_at ?? "");
+  const [metOn, setMetOn] = useState(initial.met_on ?? "");
+  const [metVia, setMetVia] = useState(initial.met_via ?? "");
+  const [interests, setInterests] = useState(initial.interests ?? "");
   const [notes, setNotes] = useState(initial.notes ?? "");
   const [tags, setTags] = useState<string[]>(initial.tags ?? []);
   const [tagDraft, setTagDraft] = useState("");
@@ -71,6 +79,10 @@ export function ContactProfileEditor({
           location: location.trim() || null,
           birthday: birthday.trim() || null,
           linkedin_url: linkedin.trim() || null,
+          met_at: metAt.trim() || null,
+          met_on: metOn.trim() || null,
+          met_via: metVia.trim() || null,
+          interests: interests.trim() || null,
           notes: notes.trim() || null,
           tags,
         }),
@@ -93,6 +105,9 @@ export function ContactProfileEditor({
       ["Industry", initial.industry],
       ["Location", initial.location],
       ["Birthday", initial.birthday],
+      ["Met at", initial.met_at],
+      ["Met on", initial.met_on],
+      ["Met via", initial.met_via],
       ["LinkedIn", initial.linkedin_url],
     ];
     const filled = summary.filter(([, v]) => v && v.trim().length > 0);
@@ -105,10 +120,13 @@ export function ContactProfileEditor({
             Edit
           </Button>
         </div>
-        {filled.length === 0 && (initial.tags ?? []).length === 0 && !initial.notes ? (
+        {filled.length === 0 &&
+        (initial.tags ?? []).length === 0 &&
+        !initial.notes &&
+        !initial.interests ? (
           <p className="text-xs text-muted-foreground">
-            Nothing yet. Add company, role, birthday, tags, or notes to ground
-            search and scoring.
+            Nothing yet. Add company, role, where/when you met, interests, or
+            notes to ground search and scoring.
           </p>
         ) : (
           <div className="flex flex-col gap-3">
@@ -144,10 +162,23 @@ export function ContactProfileEditor({
                 ))}
               </div>
             )}
+            {initial.interests && (
+              <div className="flex flex-col">
+                <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                  Interests
+                </span>
+                <p className="text-sm leading-relaxed">{initial.interests}</p>
+              </div>
+            )}
             {initial.notes && (
-              <p className="text-sm whitespace-pre-wrap leading-relaxed text-muted-foreground">
-                {initial.notes}
-              </p>
+              <div className="flex flex-col">
+                <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                  Notes
+                </span>
+                <p className="text-sm whitespace-pre-wrap leading-relaxed">
+                  {initial.notes}
+                </p>
+              </div>
             )}
           </div>
         )}
@@ -176,10 +207,10 @@ export function ContactProfileEditor({
         <Field label="Location">
           <Input value={location} onChange={(e) => setLocation(e.target.value)} />
         </Field>
-        <Field label="Birthday (yyyy-mm-dd, 1900 if year unknown)">
+        <Field label="Birthday">
           <Input
+            type="date"
             value={birthday}
-            placeholder="1990-04-15"
             onChange={(e) => setBirthday(e.target.value)}
           />
         </Field>
@@ -190,6 +221,41 @@ export function ContactProfileEditor({
             onChange={(e) => setLinkedin(e.target.value)}
           />
         </Field>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-lg border bg-secondary/30 p-3">
+        <Field label="Where you met">
+          <Input
+            value={metAt}
+            onChange={(e) => setMetAt(e.target.value)}
+            placeholder="MPCS class · NYC dinner · Twitter"
+          />
+        </Field>
+        <Field label="When you met">
+          <Input
+            type="date"
+            value={metOn}
+            onChange={(e) => setMetOn(e.target.value)}
+          />
+        </Field>
+        <div className="sm:col-span-2">
+          <Field label="How you met / introduced by">
+            <Input
+              value={metVia}
+              onChange={(e) => setMetVia(e.target.value)}
+              placeholder="Intro from Sarah · Conference panel · Cold reach-out"
+            />
+          </Field>
+        </div>
+        <div className="sm:col-span-2">
+          <Field label="Shared interests / hobbies">
+            <Input
+              value={interests}
+              onChange={(e) => setInterests(e.target.value)}
+              placeholder="tennis, AI startups, Italian wine"
+            />
+          </Field>
+        </div>
       </div>
 
       <div className="flex flex-col gap-2">

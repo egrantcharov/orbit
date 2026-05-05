@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { UserPlus, Save, Loader2 } from "lucide-react";
+import { UserPlus, Save, Loader2, ChevronDown, ChevronUp } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -26,12 +26,20 @@ export function AddContactModal({
   const router = useRouter();
   const [open, setOpen] = useState(defaultOpen);
   const [busy, setBusy] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
 
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [company, setCompany] = useState("");
   const [jobTitle, setJobTitle] = useState("");
   const [linkedin, setLinkedin] = useState("");
+  const [location, setLocation] = useState("");
+  const [birthday, setBirthday] = useState("");
+  const [metAt, setMetAt] = useState("");
+  const [metOn, setMetOn] = useState("");
+  const [metVia, setMetVia] = useState("");
+  const [interests, setInterests] = useState("");
+  const [notes, setNotes] = useState("");
 
   function reset() {
     setDisplayName("");
@@ -39,6 +47,14 @@ export function AddContactModal({
     setCompany("");
     setJobTitle("");
     setLinkedin("");
+    setLocation("");
+    setBirthday("");
+    setMetAt("");
+    setMetOn("");
+    setMetVia("");
+    setInterests("");
+    setNotes("");
+    setMoreOpen(false);
   }
 
   async function save() {
@@ -59,6 +75,13 @@ export function AddContactModal({
           company: company.trim() || null,
           job_title: jobTitle.trim() || null,
           linkedin_url: linkedin.trim() || null,
+          location: location.trim() || null,
+          birthday: birthday.trim() || null,
+          met_at: metAt.trim() || null,
+          met_on: metOn.trim() || null,
+          met_via: metVia.trim() || null,
+          interests: interests.trim() || null,
+          notes: notes.trim() || null,
         }),
       });
       if (!res.ok) {
@@ -89,11 +112,11 @@ export function AddContactModal({
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Add a contact</DialogTitle>
           <DialogDescription>
-            Drop a CSV from /app/import to bulk-add. This is for one-offs.
+            Drop a CSV at /app/import to bulk-add. This is for one-offs.
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-3">
@@ -136,6 +159,75 @@ export function AddContactModal({
               placeholder="https://www.linkedin.com/in/…"
             />
           </Field>
+
+          <button
+            type="button"
+            onClick={() => setMoreOpen((v) => !v)}
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground self-start"
+          >
+            {moreOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+            {moreOpen ? "Hide" : "Show"} relationship details
+          </button>
+
+          {moreOpen && (
+            <div className="flex flex-col gap-3 rounded-lg border bg-secondary/30 p-3">
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Location">
+                  <Input
+                    value={location}
+                    onChange={(e) => setLocation(e.target.value)}
+                    placeholder="Chicago, IL"
+                  />
+                </Field>
+                <Field label="Birthday">
+                  <Input
+                    type="date"
+                    value={birthday}
+                    onChange={(e) => setBirthday(e.target.value)}
+                  />
+                </Field>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Where you met">
+                  <Input
+                    value={metAt}
+                    onChange={(e) => setMetAt(e.target.value)}
+                    placeholder="MPCS class, NYC dinner, Twitter…"
+                  />
+                </Field>
+                <Field label="When you met">
+                  <Input
+                    type="date"
+                    value={metOn}
+                    onChange={(e) => setMetOn(e.target.value)}
+                  />
+                </Field>
+              </div>
+              <Field label="How you met / introduced by">
+                <Input
+                  value={metVia}
+                  onChange={(e) => setMetVia(e.target.value)}
+                  placeholder="Intro from Sarah · Conference panel · Cold reach-out"
+                />
+              </Field>
+              <Field label="Shared interests / hobbies">
+                <Input
+                  value={interests}
+                  onChange={(e) => setInterests(e.target.value)}
+                  placeholder="tennis, AI startups, Italian wine"
+                />
+              </Field>
+              <Field label="Notes">
+                <textarea
+                  className="min-h-[6rem] w-full rounded-md border bg-background px-3 py-2 text-sm leading-relaxed"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Anything you want to remember."
+                />
+              </Field>
+            </div>
+          )}
+
           <div className="flex justify-end gap-2 pt-1">
             <DialogClose asChild>
               <Button variant="ghost">Cancel</Button>

@@ -85,7 +85,7 @@ export default async function ContactDetail({
     supabase
       .from("contacts")
       .select(
-        "id, email, display_name, last_interaction_at, message_count, created_at, kind, kind_reason, is_pinned, is_archived, ai_summary, ai_summary_at, source, company, job_title, industry, location, linkedin_url, birthday, tags, notes, score_closeness, score_keep_in_touch, score_industry_overlap, score_age_proximity, score_career_relevance, scores_rationale, scores_at",
+        "id, email, display_name, last_interaction_at, message_count, created_at, kind, kind_reason, is_pinned, is_archived, ai_summary, ai_summary_at, source, company, job_title, industry, location, linkedin_url, birthday, tags, notes, met_at, met_on, met_via, interests, score_closeness, score_keep_in_touch, score_industry_overlap, score_age_proximity, score_career_relevance, scores_rationale, scores_at",
       )
       .eq("clerk_user_id", userId)
       .eq("id", id)
@@ -303,6 +303,10 @@ export default async function ContactDetail({
           linkedin_url: contact.linkedin_url,
           tags: contact.tags ?? [],
           notes: contact.notes,
+          met_at: contact.met_at,
+          met_on: contact.met_on,
+          met_via: contact.met_via,
+          interests: contact.interests,
         }}
       />
 
