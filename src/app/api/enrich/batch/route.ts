@@ -97,13 +97,29 @@ export async function POST(req: NextRequest) {
         }
         await markState(supabase, userId, mailbox.id, c.id, "running", 0);
         try {
-          const threads = await adapter.searchByContact({
-            clerkUserId: userId,
-            mailboxId: mailbox.id,
-            email: c.email,
-            daysBack: ENRICH_DAYS_BACK,
-            maxThreads: ENRICH_MAX_THREADS,
-          });
+          const threads = await adapter
+            .searchByContact({
+              clerkUserId: userId,
+              mailboxId: mailbox.id,
+              email: c.email,
+              daysBack: ENRICH_DAYS_BACK,
+              maxThreads: ENRICH_MAX_THREADS,
+            })
+            .catch((err) => {
+              // Bubble structured info to the catch below so we can persist
+              // a clear error_message on the enrichment_state row.
+              const code =
+                (err as { code?: number }).code ??
+                (err as { reason?: string }).reason ??
+                null;
+              const apiMsg =
+                (err as { errors?: Array<{ message?: string }> }).errors?.[0]
+                  ?.message ?? null;
+              const msg = err instanceof Error ? err.message : String(err);
+              throw new Error(
+                code ? `${code}: ${apiMsg ?? msg}` : apiMsg ?? msg,
+              );
+            });
 
           let threadsFound = 0;
           if (threads.length > 0) {

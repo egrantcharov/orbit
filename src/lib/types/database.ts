@@ -391,6 +391,74 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["briefings"]["Insert"]>;
         Relationships: [];
       };
+      publications: {
+        Row: {
+          id: string;
+          clerk_user_id: string;
+          name: string;
+          feed_url: string;
+          site_url: string | null;
+          description: string | null;
+          favicon_url: string | null;
+          last_polled_at: string | null;
+          poll_error: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          clerk_user_id: string;
+          name: string;
+          feed_url: string;
+          site_url?: string | null;
+          description?: string | null;
+          favicon_url?: string | null;
+          last_polled_at?: string | null;
+          poll_error?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["publications"]["Insert"]>;
+        Relationships: [];
+      };
+      articles: {
+        Row: {
+          id: string;
+          clerk_user_id: string;
+          publication_id: string;
+          guid: string | null;
+          url: string;
+          title: string | null;
+          author: string | null;
+          snippet: string | null;
+          content_excerpt: string | null;
+          published_at: string | null;
+          fetched_at: string;
+          is_read: boolean;
+          is_starred: boolean;
+          tldr: string | null;
+          tldr_takeaways: string[] | null;
+          tldr_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          clerk_user_id: string;
+          publication_id: string;
+          guid?: string | null;
+          url: string;
+          title?: string | null;
+          author?: string | null;
+          snippet?: string | null;
+          content_excerpt?: string | null;
+          published_at?: string | null;
+          fetched_at?: string;
+          is_read?: boolean;
+          is_starred?: boolean;
+          tldr?: string | null;
+          tldr_takeaways?: string[] | null;
+          tldr_at?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["articles"]["Insert"]>;
+        Relationships: [];
+      };
       bookmarks: {
         Row: {
           id: string;

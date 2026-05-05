@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Upload, FileText, Sparkles, UserPlus } from "lucide-react";
 import { AddContactModal } from "@/components/app/AddContactModal";
 import { OrphanRescueRow } from "@/components/app/OrphanRescueRow";
+import { BulkPasteImport } from "@/components/app/BulkPasteImport";
 import type { ImportRow } from "@/app/api/contacts/import/route";
 
 type Field = keyof ImportRow | "ignore";
@@ -234,6 +235,8 @@ export default function ImportPage() {
           }
         />
       </div>
+
+      <BulkPasteImport />
 
       <OrphanRescueRow />
 

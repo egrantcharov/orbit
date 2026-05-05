@@ -16,8 +16,9 @@ const ITEMS = [
   { href: "/app", label: "Contacts", icon: Users, prefix: "/app" as const, exact: true },
   { href: "/app/network", label: "Network", icon: Network, prefix: "/app/network" as const, exact: false },
   { href: "/app/meetings", label: "Meetings", icon: CalendarClock, prefix: "/app/meetings" as const, exact: false },
-  { href: "/app/digest", label: "Digest", icon: Newspaper, prefix: "/app/digest" as const, exact: false },
+  { href: "/app/reads", label: "Reads", icon: Newspaper, prefix: "/app/reads" as const, exact: false },
   { href: "/app/library", label: "Library", icon: BookmarkIcon, prefix: "/app/library" as const, exact: false },
+  { href: "/app/digest", label: "Digest", icon: Newspaper, prefix: "/app/digest" as const, exact: false },
   { href: "/app/import", label: "Import", icon: Upload, prefix: "/app/import" as const, exact: false },
 ];
 

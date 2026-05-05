@@ -46,12 +46,28 @@ export function EnrichButton({
         scoredCandidates?: string[];
       };
       const found = j.threadsFound ?? 0;
-      toast.success(
-        found === 0
-          ? "No threads found with this contact."
-          : `Found ${found} thread${found === 1 ? "" : "s"}.`,
-        { id: t },
-      );
+      if (found === 0) {
+        // Look up enrichment_state so we can show the actual error if Gmail
+        // returned 4xx/5xx for this specific contact.
+        const stateRes = await fetch(
+          `/api/contacts/${contactId}/enrichment-state`,
+        );
+        if (stateRes.ok) {
+          const sj = (await stateRes.json()) as {
+            status?: string;
+            error_message?: string | null;
+          };
+          if (sj.status === "error" && sj.error_message) {
+            throw new Error(sj.error_message);
+          }
+        }
+        toast.success("No threads found with this contact.", { id: t });
+      } else {
+        toast.success(
+          `Found ${found} thread${found === 1 ? "" : "s"}.`,
+          { id: t },
+        );
+      }
 
       // Auto-score if eligible.
       if (j.scoredCandidates?.includes(contactId)) {

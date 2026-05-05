@@ -6,6 +6,28 @@ export type ExtractedMetadata = {
 };
 
 /**
+ * Fetch a URL's clean markdown via Jina Reader. Returns the full markdown
+ * for downstream consumers (TLDR, indexing, etc.). Falls back to empty
+ * string on error.
+ */
+export async function fetchArticleMarkdown(url: string): Promise<string> {
+  try {
+    const target = `https://r.jina.ai/${url}`;
+    const res = await fetch(target, {
+      headers: {
+        "X-With-Generated-Alt": "true",
+        "X-Return-Format": "markdown",
+      },
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!res.ok) return "";
+    return await res.text();
+  } catch {
+    return "";
+  }
+}
+
+/**
  * Fetch a URL's clean markdown via Jina Reader (no auth required for the
  * public free tier, generous for personal use). We extract the first
  * non-empty H1 / Title for the bookmark title and the first paragraph for
