@@ -11,6 +11,7 @@ import { Upload, FileText, Sparkles, UserPlus } from "lucide-react";
 import { AddContactModal } from "@/components/app/AddContactModal";
 import { OrphanRescueRow } from "@/components/app/OrphanRescueRow";
 import { BulkPasteImport } from "@/components/app/BulkPasteImport";
+import { runTaxonomyEnrichment } from "@/lib/client/taxonomy";
 import type { ImportRow } from "@/app/api/contacts/import/route";
 
 type Field = keyof ImportRow | "ignore";
@@ -196,9 +197,12 @@ export default function ImportPage() {
         skipped += j.skipped ?? 0;
       }
       toast.success(
-        `Created ${created}, enriched ${enriched}, skipped ${skipped}`,
+        `Created ${created}, enriched ${enriched}, skipped ${skipped}${created > 0 ? " · auto-filling taxonomy" : ""}`,
         { id: t },
       );
+      if (created > 0) {
+        void runTaxonomyEnrichment();
+      }
       router.push("/app");
       router.refresh();
     } catch (err) {

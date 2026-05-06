@@ -1,6 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { AppHeader } from "@/components/app/AppHeader";
+import { QuickCapture } from "@/components/app/QuickCapture";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 
 export default async function AppLayout({
@@ -22,6 +23,7 @@ export default async function AppLayout({
     <div className="flex flex-1 flex-col">
       <AppHeader connection={connection} />
       <div className="flex flex-1 flex-col">{children}</div>
+      <QuickCapture />
     </div>
   );
 }

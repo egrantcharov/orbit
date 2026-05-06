@@ -16,6 +16,7 @@ export type ContactProfile = {
   sector: string | null;
   team: string | null;
   school: string | null;
+  seniority: string | null;
   location: string | null;
   birthday: string | null;
   linkedin_url: string | null;
@@ -25,6 +26,7 @@ export type ContactProfile = {
   met_on: string | null;
   met_via: string | null;
   interests: string | null;
+  taxonomy_inferred: boolean;
 };
 
 export function ContactProfileEditor({
@@ -108,12 +110,18 @@ export function ContactProfileEditor({
   }
 
   if (!editing) {
+    const inferredFields = new Set(
+      initial.taxonomy_inferred
+        ? ["Industry", "Sector", "Team / Group", "Seniority"]
+        : [],
+    );
     const summary: Array<[string, string | null]> = [
       ["Company", initial.company],
       ["Title", initial.job_title],
       ["Team / Group", initial.team],
       ["Industry", initial.industry],
       ["Sector", initial.sector],
+      ["Seniority", initial.seniority],
       ["School", initial.school],
       ["Location", initial.location],
       ["Birthday", initial.birthday],
@@ -145,8 +153,18 @@ export function ContactProfileEditor({
             <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5 text-sm">
               {filled.map(([k, v]) => (
                 <div key={k} className="flex flex-col">
-                  <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                  <dt
+                    className="text-[11px] uppercase tracking-wide text-muted-foreground inline-flex items-center gap-1"
+                    title={
+                      inferredFields.has(k)
+                        ? "AI-inferred — edit to override"
+                        : undefined
+                    }
+                  >
                     {k}
+                    {inferredFields.has(k) && (
+                      <span className="text-amber-500">✨</span>
+                    )}
                   </dt>
                   <dd className="truncate">
                     {k === "LinkedIn" ? (

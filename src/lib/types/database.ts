@@ -53,7 +53,44 @@ export type InteractionKind =
   | "phone"
   | "imessage";
 
-export type BriefingKind = "today" | "meeting";
+export type BriefingKind = "today" | "meeting" | "synth_daily" | "synth_weekly";
+
+export type ListFilter = {
+  industry?: string[];
+  sector?: string[];
+  company?: string[];
+  team?: string[];
+  school?: string[];
+  tags_any?: string[];
+  is_pinned?: boolean;
+  days_since_interaction_gte?: number;
+  min_keep_in_touch?: number;
+  min_career_relevance?: number;
+  search_text?: string;
+};
+
+export type SynthCard = {
+  cluster?: string;
+  takeaway: string;
+  citation: string; // sender name or publication
+  source_id?: string;
+  source_url?: string;
+};
+
+export type SynthDailyBody = {
+  generatedAt: string;
+  cards: SynthCard[];
+  itemsConsidered: number;
+};
+
+export type SynthWeeklyBody = {
+  generatedAt: string;
+  clusters: Array<{
+    title: string;
+    takeaways: SynthCard[];
+  }>;
+  itemsConsidered: number;
+};
 
 export type TodayBriefingCard = {
   id: string;
@@ -220,6 +257,9 @@ export type Database = {
           scores_at: string | null;
           // v3 new
           is_archived: boolean;
+          // v3.8
+          taxonomy_inferred: boolean;
+          seniority: string | null;
         };
         Insert: {
           id?: string;
@@ -262,6 +302,8 @@ export type Database = {
           scores_rationale?: ScoresRationale | null;
           scores_at?: string | null;
           is_archived?: boolean;
+          taxonomy_inferred?: boolean;
+          seniority?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["contacts"]["Insert"]>;
         Relationships: [];
@@ -316,6 +358,44 @@ export type Database = {
         Update: Partial<
           Database["public"]["Tables"]["thread_participants"]["Insert"]
         >;
+        Relationships: [];
+      };
+      lists: {
+        Row: {
+          id: string;
+          clerk_user_id: string;
+          name: string;
+          description: string | null;
+          filter: ListFilter;
+          stages: string[] | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          clerk_user_id: string;
+          name: string;
+          description?: string | null;
+          filter?: ListFilter;
+          stages?: string[] | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["lists"]["Insert"]>;
+        Relationships: [];
+      };
+      list_contacts: {
+        Row: {
+          list_id: string;
+          contact_id: string;
+          stage: string | null;
+          added_at: string;
+        };
+        Insert: {
+          list_id: string;
+          contact_id: string;
+          stage?: string | null;
+          added_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["list_contacts"]["Insert"]>;
         Relationships: [];
       };
       enrichment_state: {
@@ -375,7 +455,11 @@ export type Database = {
           clerk_user_id: string;
           kind: BriefingKind;
           ref_id: string | null;
-          body: TodayBriefingBody | MeetingBriefingBody;
+          body:
+            | TodayBriefingBody
+            | MeetingBriefingBody
+            | SynthDailyBody
+            | SynthWeeklyBody;
           generated_at: string;
           expires_at: string | null;
         };
@@ -384,7 +468,11 @@ export type Database = {
           clerk_user_id: string;
           kind: BriefingKind;
           ref_id?: string | null;
-          body: TodayBriefingBody | MeetingBriefingBody;
+          body:
+            | TodayBriefingBody
+            | MeetingBriefingBody
+            | SynthDailyBody
+            | SynthWeeklyBody;
           generated_at?: string;
           expires_at?: string | null;
         };

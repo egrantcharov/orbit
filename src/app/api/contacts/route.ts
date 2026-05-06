@@ -1,6 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse, type NextRequest } from "next/server";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
+import { inferTaxonomy } from "@/lib/anthropic/taxonomy";
 import type { Database } from "@/lib/types/database";
 
 type ContactInsert = Database["public"]["Tables"]["contacts"]["Insert"];
@@ -96,7 +97,7 @@ export async function POST(req: NextRequest) {
   const { data, error } = await supabase
     .from("contacts")
     .insert(insert)
-    .select("id")
+    .select("id, display_name, company, job_title, industry, sector, team")
     .maybeSingle();
 
   if (error || !data) {
@@ -106,5 +107,46 @@ export async function POST(req: NextRequest) {
     console.error("contact create failed", { userId, code: error?.code });
     return NextResponse.json({ error: "db_error" }, { status: 500 });
   }
+
+  // Best-effort: if we have company+title and industry/sector are blank,
+  // fire one inline taxonomy call with a 3s budget. Never blocks the
+  // response on failure.
+  if (data.company && data.job_title && !data.industry) {
+    try {
+      const inferPromise = inferTaxonomy([
+        {
+          id: data.id,
+          display_name: data.display_name,
+          company: data.company,
+          job_title: data.job_title,
+          industry: data.industry,
+          sector: data.sector,
+          team: data.team,
+        },
+      ]);
+      const timeoutPromise = new Promise<null>((resolve) =>
+        setTimeout(() => resolve(null), 3000),
+      );
+      const result = await Promise.race([inferPromise, timeoutPromise]);
+      if (Array.isArray(result) && result[0]) {
+        const r = result[0];
+        const patch: Database["public"]["Tables"]["contacts"]["Update"] = {
+          taxonomy_inferred: true,
+        };
+        if (r.industry) patch.industry = r.industry;
+        if (r.sector) patch.sector = r.sector;
+        if (r.team) patch.team = r.team;
+        if (r.seniority) patch.seniority = r.seniority;
+        await supabase
+          .from("contacts")
+          .update(patch)
+          .eq("clerk_user_id", userId)
+          .eq("id", data.id);
+      }
+    } catch {
+      // ignore — contact already saved
+    }
+  }
+
   return NextResponse.json({ ok: true, id: data.id });
 }
