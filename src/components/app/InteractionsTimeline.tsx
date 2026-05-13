@@ -60,7 +60,7 @@ export async function InteractionsTimeline({
   const { data: rows } = await supabase
     .from("interactions")
     .select(
-      "id, kind, occurred_at, title, body, audio_path, audio_duration_ms, audio_mime",
+      "id, kind, occurred_at, title, body, audio_path, audio_duration_ms, audio_mime, ai_title, ai_summary, ai_action_items",
     )
     .eq("clerk_user_id", clerkUserId)
     .eq("contact_id", contactId)
@@ -81,6 +81,11 @@ export async function InteractionsTimeline({
         {rows.map((r) => {
           const meta = KIND_META[r.kind as InteractionKind];
           const Icon = meta.icon;
+          const headline = r.title || r.ai_title || meta.label;
+          const showSummary = !!r.ai_summary;
+          const actionItems = Array.isArray(r.ai_action_items)
+            ? (r.ai_action_items as string[]).filter(Boolean)
+            : [];
           return (
             <li key={r.id} className="flex items-start gap-3">
               <div
@@ -91,9 +96,7 @@ export async function InteractionsTimeline({
               <div className="flex-1 min-w-0">
                 <div className="flex items-baseline justify-between gap-2 flex-wrap">
                   <div className="flex items-center gap-2 min-w-0">
-                    <h4 className="text-sm font-medium truncate">
-                      {r.title || meta.label}
-                    </h4>
+                    <h4 className="text-sm font-medium truncate">{headline}</h4>
                     <Badge variant="muted" className="font-normal text-[10px]">
                       {meta.label}
                     </Badge>
@@ -102,10 +105,29 @@ export async function InteractionsTimeline({
                     {formatRelativeTime(r.occurred_at)}
                   </span>
                 </div>
-                {r.body && (
-                  <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed mt-1">
-                    {r.body}
+                {showSummary ? (
+                  <p className="text-sm text-foreground/90 leading-relaxed mt-1">
+                    {r.ai_summary}
                   </p>
+                ) : (
+                  r.body && (
+                    <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed mt-1">
+                      {r.body}
+                    </p>
+                  )
+                )}
+                {actionItems.length > 0 && (
+                  <ul className="mt-2 flex flex-col gap-1">
+                    {actionItems.map((item, i) => (
+                      <li
+                        key={i}
+                        className="text-xs text-muted-foreground flex items-start gap-1.5"
+                      >
+                        <span className="text-foreground/70">→</span>
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
                 )}
                 {r.kind === "voice_memo" && r.audio_path && (
                   <VoiceMemoPlayer

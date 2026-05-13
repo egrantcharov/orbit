@@ -437,6 +437,10 @@ export type Database = {
           audio_path: string | null;
           audio_duration_ms: number | null;
           audio_mime: string | null;
+          ai_title: string | null;
+          ai_summary: string | null;
+          ai_action_items: string[] | null;
+          ai_generated_at: string | null;
         };
         Insert: {
           id?: string;
@@ -451,6 +455,10 @@ export type Database = {
           audio_path?: string | null;
           audio_duration_ms?: number | null;
           audio_mime?: string | null;
+          ai_title?: string | null;
+          ai_summary?: string | null;
+          ai_action_items?: string[] | null;
+          ai_generated_at?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["interactions"]["Insert"]>;
         Relationships: [];

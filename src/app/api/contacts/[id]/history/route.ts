@@ -35,6 +35,9 @@ export type HistoryItem =
       occurredAt: string;
       title: string | null;
       body: string | null;
+      aiTitle: string | null;
+      aiSummary: string | null;
+      aiActionItems: string[];
       audio: { path: string; durationMs: number | null; mime: string | null } | null;
     };
 
@@ -116,7 +119,7 @@ export async function GET(
   let iq = supabase
     .from("interactions")
     .select(
-      "id, kind, occurred_at, title, body, audio_path, audio_duration_ms, audio_mime",
+      "id, kind, occurred_at, title, body, audio_path, audio_duration_ms, audio_mime, ai_title, ai_summary, ai_action_items",
     )
     .eq("clerk_user_id", userId)
     .eq("contact_id", contactId)
@@ -135,6 +138,11 @@ export async function GET(
       occurredAt: r.occurred_at,
       title: r.title,
       body: r.body,
+      aiTitle: r.ai_title,
+      aiSummary: r.ai_summary,
+      aiActionItems: Array.isArray(r.ai_action_items)
+        ? (r.ai_action_items as string[]).filter((v) => typeof v === "string")
+        : [],
       audio: r.audio_path
         ? {
             path: r.audio_path,

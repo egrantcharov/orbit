@@ -51,6 +51,9 @@ type LogItem = {
   occurredAt: string;
   title: string | null;
   body: string | null;
+  aiTitle: string | null;
+  aiSummary: string | null;
+  aiActionItems: string[];
   audio: { path: string; durationMs: number | null; mime: string | null } | null;
 };
 
@@ -102,12 +105,31 @@ const KIND_META = {
   },
 } as const;
 
+type Filter = "all" | "email" | "calls" | "voice" | "notes";
+
+const FILTERS: Array<{ key: Filter; label: string; matches: (it: Item) => boolean }> = [
+  { key: "all", label: "All", matches: () => true },
+  { key: "email", label: "Email", matches: (it) => it.kind === "email_thread" },
+  {
+    key: "calls",
+    label: "Calls",
+    matches: (it) => it.kind === "phone" || it.kind === "calendar_event",
+  },
+  { key: "voice", label: "Voice", matches: (it) => it.kind === "voice_memo" },
+  {
+    key: "notes",
+    label: "Notes",
+    matches: (it) => it.kind === "note" || it.kind === "imessage",
+  },
+];
+
 export function ConversationHistory({ contactId }: { contactId: string }) {
   const [items, setItems] = useState<Item[]>([]);
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState("");
   const [activeQuery, setActiveQuery] = useState("");
+  const [filter, setFilter] = useState<Filter>("all");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(
@@ -147,6 +169,13 @@ export function ConversationHistory({ contactId }: { contactId: string }) {
     }, 250);
   }
 
+  const activeMatcher =
+    FILTERS.find((f) => f.key === filter)?.matches ?? FILTERS[0].matches;
+  const visible = items.filter(activeMatcher);
+  const filterCounts = FILTERS.map((f) => ({
+    ...f,
+    count: items.filter(f.matches).length,
+  }));
   const last = items[items.length - 1];
   return (
     <Card className="p-5 flex flex-col gap-4">
@@ -175,15 +204,44 @@ export function ConversationHistory({ contactId }: { contactId: string }) {
         />
       </div>
 
-      {items.length === 0 && !loading ? (
+      <div className="flex flex-wrap gap-1.5">
+        {filterCounts.map((f) => {
+          const active = filter === f.key;
+          return (
+            <button
+              key={f.key}
+              type="button"
+              onClick={() => setFilter(f.key)}
+              className={`text-[11px] px-2.5 py-1 rounded-full border transition-colors ${
+                active
+                  ? "bg-foreground text-background border-foreground"
+                  : "bg-card text-muted-foreground hover:text-foreground border-border"
+              }`}
+            >
+              {f.label}
+              {f.key !== "all" && f.count > 0 && (
+                <span
+                  className={`ml-1 ${active ? "text-background/70" : "text-muted-foreground/60"}`}
+                >
+                  {f.count}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {visible.length === 0 && !loading ? (
         <p className="text-sm text-muted-foreground py-6 text-center">
           {activeQuery
             ? "Nothing matched that search."
-            : "No history yet. Log a note, record a call, or sync Gmail to populate this feed."}
+            : filter !== "all"
+              ? `No ${filter} entries loaded yet.`
+              : "No history yet. Log a note, record a call, or sync Gmail to populate this feed."}
         </p>
       ) : (
         <ul className="flex flex-col gap-3">
-          {items.map((it) => (
+          {visible.map((it) => (
             <HistoryRow key={`${it.kind}:${it.id}`} item={it} contactId={contactId} />
           ))}
         </ul>
@@ -268,7 +326,7 @@ function HistoryRow({ item, contactId }: { item: Item; contactId: string }) {
         <div className="flex items-baseline justify-between gap-2 flex-wrap">
           <div className="flex items-center gap-2 min-w-0">
             <h4 className="text-sm font-medium truncate">
-              {item.title || meta.label}
+              {item.title || item.aiTitle || meta.label}
             </h4>
             <Badge variant="muted" className="font-normal text-[10px]">
               {meta.label}
@@ -278,10 +336,29 @@ function HistoryRow({ item, contactId }: { item: Item; contactId: string }) {
             {formatRelativeTime(item.occurredAt)}
           </span>
         </div>
-        {item.body && (
-          <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed mt-1">
-            {item.body}
+        {item.aiSummary ? (
+          <p className="text-sm text-foreground/90 leading-relaxed mt-1">
+            {item.aiSummary}
           </p>
+        ) : (
+          item.body && (
+            <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed mt-1">
+              {item.body}
+            </p>
+          )
+        )}
+        {item.aiActionItems.length > 0 && (
+          <ul className="mt-2 flex flex-col gap-1">
+            {item.aiActionItems.map((a, i) => (
+              <li
+                key={i}
+                className="text-xs text-muted-foreground flex items-start gap-1.5"
+              >
+                <span className="text-foreground/70">→</span>
+                {a}
+              </li>
+            ))}
+          </ul>
         )}
         {item.kind === "voice_memo" && item.audio && (
           <VoiceMemoPlayer

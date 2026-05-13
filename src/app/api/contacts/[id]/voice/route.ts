@@ -19,11 +19,12 @@
  */
 
 import { auth } from "@clerk/nextjs/server";
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse, after, type NextRequest } from "next/server";
 import { randomUUID } from "node:crypto";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { checkRateLimit } from "@/lib/security/rateLimit";
 import { isUuid, rateLimitResponse } from "@/lib/security/input";
+import { summarizeVoiceMemo } from "@/lib/anthropic/voiceSummary";
 
 export const maxDuration = 60;
 export const runtime = "nodejs";
@@ -127,10 +128,10 @@ export async function POST(
 
   const supabase = createSupabaseServiceClient();
 
-  // Ownership check: the contact must belong to this user.
+  // Ownership check + grab name for the AI summarizer prompt.
   const { data: contact } = await supabase
     .from("contacts")
-    .select("id")
+    .select("id, display_name")
     .eq("clerk_user_id", userId)
     .eq("id", contactId)
     .maybeSingle();
@@ -174,7 +175,7 @@ export async function POST(
       audio_mime: mime,
     })
     .select(
-      "id, kind, occurred_at, title, body, audio_path, audio_duration_ms, audio_mime",
+      "id, kind, occurred_at, title, body, audio_path, audio_duration_ms, audio_mime, ai_title, ai_summary, ai_action_items, ai_generated_at",
     )
     .maybeSingle();
 
@@ -195,6 +196,38 @@ export async function POST(
     .eq("clerk_user_id", userId)
     .eq("id", contact.id)
     .lt("last_interaction_at", occurredAt);
+
+  // Deferred AI post-processing via Next's after(). Runs after the response
+  // is sent so the user sees the save instantly, but Vercel keeps the
+  // function alive until the deferred task resolves — unlike fire-and-forget
+  // which can be torn down mid-task. Errors are swallowed (and logged) so a
+  // transient Anthropic outage never strands a voice memo upload.
+  if (transcript && process.env.ANTHROPIC_API_KEY) {
+    const interactionId = row.id;
+    const displayName = contact.display_name;
+    after(async () => {
+      try {
+        const summary = await summarizeVoiceMemo(transcript, displayName);
+        if (!summary) return;
+        await supabase
+          .from("interactions")
+          .update({
+            ai_title: summary.title || null,
+            ai_summary: summary.summary || null,
+            ai_action_items: summary.actionItems ?? [],
+            ai_generated_at: new Date().toISOString(),
+          })
+          .eq("clerk_user_id", userId)
+          .eq("id", interactionId);
+      } catch (err) {
+        console.error("voice ai summary failed", {
+          userId,
+          interactionId,
+          msg: err instanceof Error ? err.message : String(err),
+        });
+      }
+    });
+  }
 
   return NextResponse.json({ ok: true, interaction: row });
 }
