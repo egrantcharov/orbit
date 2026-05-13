@@ -4,7 +4,7 @@ A personal operating system for your relationships and knowledge. Orbit auto-ing
 
 Built for [Design, Build, Ship (MPCS 51238)](https://mpcs-courses.cs.uchicago.edu/) at UChicago.
 
-**Live:** https://orbit-drab-phi.vercel.app — **Current build:** v3.11 (Week 8)
+**Live:** https://orbit-drab-phi.vercel.app — **Current build:** v3.13 (Week 8)
 
 ---
 
