@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/brand/logo";
+import { HeroMock } from "@/components/brand/HeroMock";
 import { APP_VERSION } from "@/lib/version";
 
 export default async function Home() {
@@ -78,6 +79,10 @@ export default async function Home() {
               </>
             )}
           </div>
+        </section>
+
+        <section className="w-full max-w-4xl pb-16 lg:pb-24">
+          <HeroMock />
         </section>
 
         <section className="w-full max-w-5xl pb-6">

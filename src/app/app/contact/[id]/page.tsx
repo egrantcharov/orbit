@@ -32,6 +32,7 @@ import { LogInteractionModal } from "@/components/app/LogInteractionModal";
 import { InteractionsTimeline } from "@/components/app/InteractionsTimeline";
 import { VoiceRecorderModal } from "@/components/app/VoiceRecorderModal";
 import { ConversationHistory } from "@/components/app/ConversationHistory";
+import { Mic } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -252,15 +253,24 @@ export default async function ContactDetail({
             contactEmail={contact.email}
             contactName={contact.display_name}
           />
-          <EnrichButton contactId={contact.id} hasEmail={!!contact.email} />
+          <VoiceRecorderModal
+            contactId={contact.id}
+            contactName={contact.display_name}
+            trigger={
+              <Button
+                variant="default"
+                className="bg-rose-600 hover:bg-rose-700 text-white"
+              >
+                <Mic className="h-4 w-4" />
+                Record call
+              </Button>
+            }
+          />
           <LogInteractionModal
             contactId={contact.id}
             contactName={contact.display_name}
           />
-          <VoiceRecorderModal
-            contactId={contact.id}
-            contactName={contact.display_name}
-          />
+          <EnrichButton contactId={contact.id} hasEmail={!!contact.email} />
         </div>
       </Card>
 

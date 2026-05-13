@@ -2,6 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { SelfProfileForm } from "@/components/app/SelfProfileForm";
+import { DataControls } from "@/components/app/DataControls";
 import type { SelfProfile } from "@/lib/types/database";
 
 export const dynamic = "force-dynamic";
@@ -38,6 +39,8 @@ export default async function SettingsPage() {
       >
         Manage connected mailboxes →
       </a>
+
+      <DataControls />
     </main>
   );
 }
