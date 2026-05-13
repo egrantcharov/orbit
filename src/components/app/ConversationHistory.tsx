@@ -231,7 +231,20 @@ export function ConversationHistory({ contactId }: { contactId: string }) {
         })}
       </div>
 
-      {visible.length === 0 && !loading ? (
+      {items.length === 0 && loading ? (
+        <ul className="flex flex-col gap-3" aria-hidden>
+          {[0, 1, 2, 3].map((i) => (
+            <li key={i} className="flex items-start gap-3">
+              <div className="h-7 w-7 rounded-md bg-foreground/10 animate-pulse shrink-0" />
+              <div className="flex-1 min-w-0 space-y-1.5">
+                <div className="h-3 w-48 rounded bg-foreground/15 animate-pulse" />
+                <div className="h-2.5 rounded bg-foreground/10 animate-pulse" />
+                <div className="h-2.5 w-[78%] rounded bg-foreground/10 animate-pulse" />
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : visible.length === 0 && !loading ? (
         <p className="text-sm text-muted-foreground py-6 text-center">
           {activeQuery
             ? "Nothing matched that search."

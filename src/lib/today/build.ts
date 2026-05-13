@@ -283,16 +283,86 @@ export async function buildTodayCards(
     });
   }
 
-  // Rank: meetings first (urgency), then unanswered, birthdays, drifting,
-  // stale_pinned. Cap at MAX_CARDS, but always keep at least one of each
-  // category if possible.
+  // 6) VOICE FOLLOW-UPS — last 7 days of voice memos with non-empty
+  // action-item lists. Surfaces the Claude-extracted bullets on the
+  // contact card so the user actually does what they promised on the call.
+  const VOICE_FOLLOWUP_DAYS = 7;
+  const { data: voiceMemos } = await supabase
+    .from("interactions")
+    .select(
+      "id, contact_id, occurred_at, ai_title, ai_action_items, title",
+    )
+    .eq("clerk_user_id", clerkUserId)
+    .eq("kind", "voice_memo")
+    .gte("occurred_at", daysAgoIso(VOICE_FOLLOWUP_DAYS))
+    .not("ai_action_items", "is", null)
+    .order("occurred_at", { ascending: false })
+    .limit(5);
+  const memoRows = (voiceMemos ?? []).filter((m) => {
+    const items = Array.isArray(m.ai_action_items)
+      ? (m.ai_action_items as unknown[])
+      : [];
+    return items.some((v) => typeof v === "string" && v.trim().length > 0);
+  });
+  if (memoRows.length > 0) {
+    const memoContactIds = Array.from(
+      new Set(memoRows.map((m) => m.contact_id)),
+    );
+    const { data: memoContacts } = await supabase
+      .from("contacts")
+      .select("id, display_name, email")
+      .eq("clerk_user_id", clerkUserId)
+      .in("id", memoContactIds);
+    const memoContactById = new Map(
+      (memoContacts ?? []).map((c) => [c.id, c]),
+    );
+    for (const m of memoRows) {
+      const contact = memoContactById.get(m.contact_id);
+      if (!contact) continue;
+      const items = (m.ai_action_items as unknown[])
+        .filter(
+          (v): v is string => typeof v === "string" && v.trim().length > 0,
+        )
+        .slice(0, 4);
+      const name = contact.display_name ?? contact.email ?? "your contact";
+      const headline = m.ai_title || m.title || "Follow up from your call";
+      const days = Math.round(
+        (Date.now() - new Date(m.occurred_at).getTime()) / 86_400_000,
+      );
+      cards.push({
+        id: `voice_followup:${m.id}`,
+        kind: "voice_followup",
+        contactId: contact.id,
+        contactName: name,
+        contactEmail: contact.email,
+        headline: `${headline} — ${name}`,
+        reason:
+          days === 0
+            ? "From your voice memo today"
+            : days === 1
+              ? "From yesterday's voice memo"
+              : `From your voice memo ${days} days ago`,
+        bullets: items,
+        action: {
+          type: "open_contact",
+          label: "Open contact",
+          href: `/app/contact/${contact.id}`,
+        },
+      });
+    }
+  }
+
+  // Rank: meetings first (urgency), then voice follow-ups (you literally
+  // promised these out loud), then unanswered, birthdays, drifting,
+  // stale_pinned. Cap at MAX_CARDS.
   const order: Record<TodayBriefingCard["kind"], number> = {
     upcoming_meeting: 0,
-    unanswered: 1,
-    birthday: 2,
-    drifting: 3,
-    scheduled_followup: 4,
-    general: 5,
+    voice_followup: 1,
+    unanswered: 2,
+    birthday: 3,
+    drifting: 4,
+    scheduled_followup: 5,
+    general: 6,
   };
   cards.sort((a, b) => order[a.kind] - order[b.kind]);
   return cards.slice(0, MAX_CARDS);

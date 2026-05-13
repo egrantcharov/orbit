@@ -100,12 +100,16 @@ export type TodayBriefingCard = {
     | "unanswered"
     | "upcoming_meeting"
     | "scheduled_followup"
+    | "voice_followup"
     | "general";
   contactId?: string | null;
   contactName?: string | null;
   contactEmail?: string | null;
   headline: string;
   reason: string;
+  // Optional structured bullets (used by voice_followup to render Claude-
+  // generated action items below the card body).
+  bullets?: string[];
   action: {
     type: "email" | "schedule" | "open_brief" | "open_contact" | "external";
     label: string;

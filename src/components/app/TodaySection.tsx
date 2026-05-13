@@ -7,10 +7,10 @@ import {
   RefreshCw,
   Cake,
   Mail,
+  Mic,
   CalendarClock,
   Clock,
   ArrowRight,
-  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Card } from "@/components/ui/card";
@@ -53,11 +53,31 @@ export function TodaySection({ fromEmail }: { fromEmail: string | null }) {
 
   if (state === null) {
     return (
-      <Card className="p-5 flex items-center gap-3">
-        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-        <span className="text-sm text-muted-foreground">
-          Building today&apos;s nudges…
-        </span>
+      <Card className="p-5 flex flex-col gap-4">
+        <div className="flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-100/60 dark:bg-amber-950/40">
+            <Sparkles className="h-4 w-4 text-amber-600/60 dark:text-amber-400/60" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <div className="h-3.5 w-32 rounded bg-foreground/15 animate-pulse" />
+            <div className="h-2.5 w-44 rounded bg-foreground/10 animate-pulse" />
+          </div>
+        </div>
+        <ul className="grid gap-2 lg:grid-cols-2">
+          {[0, 1, 2, 3].map((i) => (
+            <li
+              key={i}
+              className="rounded-lg border bg-card/60 p-4 flex flex-col gap-2"
+            >
+              <div className="flex items-center gap-2">
+                <div className="h-7 w-7 rounded-full bg-foreground/10 animate-pulse" />
+                <div className="h-3 w-28 rounded bg-foreground/15 animate-pulse" />
+              </div>
+              <div className="h-2.5 rounded bg-foreground/10 animate-pulse" />
+              <div className="h-2.5 w-[80%] rounded bg-foreground/10 animate-pulse" />
+            </li>
+          ))}
+        </ul>
       </Card>
     );
   }
@@ -125,7 +145,9 @@ function TodayCardRow({
         ? Cake
         : card.kind === "unanswered"
           ? Mail
-          : Clock;
+          : card.kind === "voice_followup"
+            ? Mic
+            : Clock;
 
   const tone =
     card.kind === "upcoming_meeting"
@@ -134,7 +156,9 @@ function TodayCardRow({
         ? "text-amber-700 bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300"
         : card.kind === "unanswered"
           ? "text-rose-700 bg-rose-100 dark:bg-rose-950/40 dark:text-rose-300"
-          : "text-emerald-700 bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300";
+          : card.kind === "voice_followup"
+            ? "text-amber-700 bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300"
+            : "text-emerald-700 bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300";
 
   return (
     <li className="rounded-xl border bg-background p-3 flex items-start gap-3">
@@ -148,6 +172,19 @@ function TodayCardRow({
         <p className="text-xs text-muted-foreground leading-relaxed">
           {card.reason}
         </p>
+        {card.bullets && card.bullets.length > 0 && (
+          <ul className="mt-1 flex flex-col gap-0.5">
+            {card.bullets.map((b, i) => (
+              <li
+                key={i}
+                className="text-xs text-foreground/80 flex items-start gap-1.5"
+              >
+                <span className="text-muted-foreground">→</span>
+                {b}
+              </li>
+            ))}
+          </ul>
+        )}
         {card.contactName && card.contactId && (
           <Link
             href={`/app/contact/${card.contactId}`}

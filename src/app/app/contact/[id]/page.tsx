@@ -8,10 +8,13 @@ import {
   Users2,
   Mail,
   Calendar,
+  CalendarPlus,
   Cake,
+  ClipboardList,
   ExternalLink,
   Building2,
   MapPin,
+  Mic,
 } from "lucide-react";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { formatRelativeTime } from "@/lib/format";
@@ -32,7 +35,7 @@ import { LogInteractionModal } from "@/components/app/LogInteractionModal";
 import { InteractionsTimeline } from "@/components/app/InteractionsTimeline";
 import { VoiceRecorderModal } from "@/components/app/VoiceRecorderModal";
 import { ConversationHistory } from "@/components/app/ConversationHistory";
-import { Mic } from "lucide-react";
+import { ContactShortcuts } from "@/components/app/ContactShortcuts";
 
 export const dynamic = "force-dynamic";
 
@@ -246,18 +249,41 @@ export default async function ContactDetail({
             contactId={contact.id}
             contactEmail={contact.email}
             contactName={contact.display_name}
-            fromEmail={connection?.account_email ?? connection?.google_email ?? null}
+            fromEmail={
+              connection?.account_email ?? connection?.google_email ?? null
+            }
+            trigger={
+              <Button
+                data-shortcut="email"
+                variant="outline"
+                disabled={!contact.email}
+              >
+                <Mail className="h-4 w-4" />
+                Email
+              </Button>
+            }
           />
           <ScheduleEventModal
             contactId={contact.id}
             contactEmail={contact.email}
             contactName={contact.display_name}
+            trigger={
+              <Button
+                data-shortcut="schedule"
+                variant="outline"
+                disabled={!contact.email}
+              >
+                <CalendarPlus className="h-4 w-4" />
+                Schedule
+              </Button>
+            }
           />
           <VoiceRecorderModal
             contactId={contact.id}
             contactName={contact.display_name}
             trigger={
               <Button
+                data-shortcut="record"
                 variant="default"
                 className="bg-rose-600 hover:bg-rose-700 text-white"
               >
@@ -269,9 +295,16 @@ export default async function ContactDetail({
           <LogInteractionModal
             contactId={contact.id}
             contactName={contact.display_name}
+            trigger={
+              <Button data-shortcut="log" variant="outline">
+                <ClipboardList className="h-4 w-4" />
+                Log interaction
+              </Button>
+            }
           />
           <EnrichButton contactId={contact.id} hasEmail={!!contact.email} />
         </div>
+        <ContactShortcuts />
       </Card>
 
       <ScoreChart
