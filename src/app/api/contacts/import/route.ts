@@ -2,6 +2,15 @@ import { auth } from "@clerk/nextjs/server";
 import { NextResponse, type NextRequest } from "next/server";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import type { Database } from "@/lib/types/database";
+import {
+  isPlainObject,
+  readJsonBody,
+  rateLimitResponse,
+} from "@/lib/security/input";
+import { checkRateLimit } from "@/lib/security/rateLimit";
+
+const IMPORT_BODY_MAX = 4 * 1024 * 1024; // 4 MB — 5000 rows of slim JSON
+const IMPORT_LIMIT_PER_HOUR = 10;
 
 type ContactInsert = Database["public"]["Tables"]["contacts"]["Insert"];
 
@@ -74,17 +83,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  let body: { rows?: unknown };
-  try {
-    body = (await req.json()) as { rows?: unknown };
-  } catch {
-    return NextResponse.json({ error: "invalid_json" }, { status: 400 });
-  }
+  const rl = checkRateLimit(
+    `import:${userId}`,
+    IMPORT_LIMIT_PER_HOUR,
+    3_600_000,
+  );
+  if (!rl.allowed) return rateLimitResponse(rl.retryAfterSeconds);
 
-  if (!Array.isArray(body.rows)) {
+  const parsed = await readJsonBody(req, IMPORT_BODY_MAX);
+  if (!parsed.ok) return parsed.response;
+  if (!isPlainObject(parsed.value)) {
+    return NextResponse.json({ error: "invalid_body" }, { status: 400 });
+  }
+  const rows = parsed.value.rows;
+  if (!Array.isArray(rows)) {
     return NextResponse.json({ error: "invalid_rows" }, { status: 400 });
   }
-  if (body.rows.length > MAX_ROWS) {
+  if (rows.length > MAX_ROWS) {
     return NextResponse.json({ error: "too_many_rows" }, { status: 413 });
   }
 
@@ -120,7 +135,7 @@ export async function POST(req: NextRequest) {
   const inserts: ContactInsert[] = [];
   const enrichments: Array<{ id: string; patch: Partial<ContactInsert> }> = [];
 
-  for (const raw of body.rows as Record<string, unknown>[]) {
+  for (const raw of rows as Record<string, unknown>[]) {
     if (!raw || typeof raw !== "object") {
       skipped++;
       continue;

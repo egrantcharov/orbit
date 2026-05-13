@@ -11,6 +11,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatRelativeTime } from "@/lib/format";
 import type { InteractionKind } from "@/lib/types/database";
+import { VoiceMemoPlayer } from "@/components/app/VoiceMemoPlayer";
 
 const KIND_META: Record<
   InteractionKind,
@@ -58,7 +59,9 @@ export async function InteractionsTimeline({
   const supabase = createSupabaseServiceClient();
   const { data: rows } = await supabase
     .from("interactions")
-    .select("id, kind, occurred_at, title, body")
+    .select(
+      "id, kind, occurred_at, title, body, audio_path, audio_duration_ms, audio_mime",
+    )
     .eq("clerk_user_id", clerkUserId)
     .eq("contact_id", contactId)
     .order("occurred_at", { ascending: false })
@@ -103,6 +106,14 @@ export async function InteractionsTimeline({
                   <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed mt-1">
                     {r.body}
                   </p>
+                )}
+                {r.kind === "voice_memo" && r.audio_path && (
+                  <VoiceMemoPlayer
+                    contactId={contactId}
+                    interactionId={r.id}
+                    durationMs={r.audio_duration_ms}
+                    mime={r.audio_mime}
+                  />
                 )}
               </div>
             </li>

@@ -30,6 +30,8 @@ import { ScheduleEventModal } from "@/components/app/ScheduleEventModal";
 import { EnrichButton } from "@/components/app/EnrichButton";
 import { LogInteractionModal } from "@/components/app/LogInteractionModal";
 import { InteractionsTimeline } from "@/components/app/InteractionsTimeline";
+import { VoiceRecorderModal } from "@/components/app/VoiceRecorderModal";
+import { ConversationHistory } from "@/components/app/ConversationHistory";
 
 export const dynamic = "force-dynamic";
 
@@ -109,26 +111,7 @@ export default async function ContactDetail({
   const linkMap = new Map<string, Role>(
     (links ?? []).map((l) => [l.thread_id, l.role as Role]),
   );
-  const threadIds = Array.from(linkMap.keys());
-
-  const { data: threads } =
-    threadIds.length > 0
-      ? await supabase
-          .from("threads")
-          .select("id, subject, snippet, body_excerpt, last_message_at")
-          .eq("clerk_user_id", userId)
-          .in("id", threadIds)
-          .order("last_message_at", { ascending: false, nullsFirst: false })
-          .limit(20)
-      : {
-          data: [] as Array<{
-            id: string;
-            subject: string | null;
-            snippet: string | null;
-            body_excerpt: string | null;
-            last_message_at: string | null;
-          }>,
-        };
+  const threadCount = linkMap.size;
 
   const roleCounts = { from: 0, to: 0, cc: 0 } as Record<Role, number>;
   for (const role of linkMap.values()) roleCounts[role] += 1;
@@ -227,11 +210,10 @@ export default async function ContactDetail({
                   last {formatRelativeTime(contact.last_interaction_at)}
                 </span>
               )}
-              {threadIds.length > 0 && (
+              {threadCount > 0 && (
                 <span className="inline-flex items-center gap-1.5">
                   <Users2 className="h-3.5 w-3.5" />
-                  {threadIds.length}{" "}
-                  {threadIds.length === 1 ? "thread" : "threads"}
+                  {threadCount} {threadCount === 1 ? "thread" : "threads"}
                 </span>
               )}
             </div>
@@ -242,7 +224,7 @@ export default async function ContactDetail({
           </div>
         </div>
 
-        {threadIds.length > 0 && (
+        {threadCount > 0 && (
           <div className="flex gap-2 flex-wrap pt-2">
             {(Object.keys(roleCounts) as Role[]).map((role) => {
               const count = roleCounts[role];
@@ -272,6 +254,10 @@ export default async function ContactDetail({
           />
           <EnrichButton contactId={contact.id} hasEmail={!!contact.email} />
           <LogInteractionModal
+            contactId={contact.id}
+            contactName={contact.display_name}
+          />
+          <VoiceRecorderModal
             contactId={contact.id}
             contactName={contact.display_name}
           />
@@ -323,56 +309,7 @@ export default async function ContactDetail({
         }}
       />
 
-      <section className="flex flex-col gap-3">
-        <div className="flex items-baseline justify-between">
-          <h2 className="text-sm font-medium text-muted-foreground">
-            Recent threads
-          </h2>
-          <span className="text-xs text-muted-foreground">
-            {threads ? `${threads.length} shown` : "—"}
-          </span>
-        </div>
-        {!threads || threads.length === 0 ? (
-          <Card className="p-8 text-center text-sm text-muted-foreground">
-            No threads recorded for this contact in the last 30 days.
-          </Card>
-        ) : (
-          <ul className="flex flex-col gap-2.5">
-            {threads.map((t) => {
-              const role = linkMap.get(t.id) ?? null;
-              const RoleIcon = role ? ROLE_LABELS[role].icon : null;
-              const roleLabel = role ? ROLE_LABELS[role].label : null;
-              const preview = t.body_excerpt ?? t.snippet;
-              return (
-                <li
-                  key={t.id}
-                  className="rounded-xl border bg-card px-4 py-3 flex flex-col gap-1.5"
-                >
-                  <div className="flex items-baseline justify-between gap-3">
-                    <h3 className="text-sm font-medium truncate">
-                      {t.subject ?? "(no subject)"}
-                    </h3>
-                    <span className="text-xs text-muted-foreground shrink-0">
-                      {formatRelativeTime(t.last_message_at)}
-                    </span>
-                  </div>
-                  {preview && (
-                    <p className="text-xs text-muted-foreground line-clamp-2">
-                      {preview}
-                    </p>
-                  )}
-                  {roleLabel && RoleIcon && (
-                    <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mt-1">
-                      <RoleIcon className="h-3 w-3" />
-                      {roleLabel}
-                    </div>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
+      <ConversationHistory contactId={contact.id} />
     </main>
   );
 }

@@ -15,6 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ContactAvatar } from "@/components/ui/contact-avatar";
+import { APP_VERSION } from "@/lib/version";
 
 export function UserMenu({
   googleEmail,
@@ -106,6 +107,11 @@ export function UserMenu({
           <LogOut />
           Sign out
         </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <div className="px-3 py-1.5 flex items-center justify-between text-[10px] uppercase tracking-wider text-muted-foreground">
+          <span>Orbit</span>
+          <span>{APP_VERSION}</span>
+        </div>
       </DropdownMenuContent>
     </DropdownMenu>
   );

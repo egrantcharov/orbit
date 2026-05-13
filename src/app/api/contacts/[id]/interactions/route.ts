@@ -2,6 +2,16 @@ import { auth } from "@clerk/nextjs/server";
 import { NextResponse, type NextRequest } from "next/server";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import type { InteractionKind } from "@/lib/types/database";
+import {
+  isPlainObject,
+  isUuid,
+  rateLimitResponse,
+  readJsonBody,
+} from "@/lib/security/input";
+import { checkRateLimit } from "@/lib/security/rateLimit";
+
+const INTERACTION_BODY_MAX = 64 * 1024; // 64 KB — supports the 10k char body cap with headroom
+const INTERACTION_LIMIT_PER_HOUR = 120;
 
 const ALLOWED: InteractionKind[] = [
   "email_thread",
@@ -28,6 +38,9 @@ export async function GET(
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   const { id } = await ctx.params;
+  if (!isUuid(id)) {
+    return NextResponse.json({ error: "invalid_id" }, { status: 400 });
+  }
   const supabase = createSupabaseServiceClient();
   const { data, error } = await supabase
     .from("interactions")
@@ -53,12 +66,23 @@ export async function POST(
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   const { id } = await ctx.params;
-  let body: Record<string, unknown>;
-  try {
-    body = (await req.json()) as Record<string, unknown>;
-  } catch {
-    return NextResponse.json({ error: "invalid_json" }, { status: 400 });
+  if (!isUuid(id)) {
+    return NextResponse.json({ error: "invalid_id" }, { status: 400 });
   }
+
+  const rl = checkRateLimit(
+    `interactions:${userId}`,
+    INTERACTION_LIMIT_PER_HOUR,
+    3_600_000,
+  );
+  if (!rl.allowed) return rateLimitResponse(rl.retryAfterSeconds);
+
+  const parsed = await readJsonBody(req, INTERACTION_BODY_MAX);
+  if (!parsed.ok) return parsed.response;
+  if (!isPlainObject(parsed.value)) {
+    return NextResponse.json({ error: "invalid_body" }, { status: 400 });
+  }
+  const body = parsed.value;
 
   const kind = typeof body.kind === "string" ? body.kind : "note";
   if (!ALLOWED.includes(kind as InteractionKind)) {

@@ -1,19 +1,46 @@
 # Orbit
 
-A personal operating system for your relationships and knowledge. Orbit auto-ingests Gmail and Calendar to build a relationship timeline for everyone you know, then quietly nudges you toward the right next conversation and the right next thing to read — without asking you to remember to do the work.
+A personal operating system for your relationships and knowledge. Orbit auto-ingests Gmail and your calendar, augments it with your LinkedIn export, and composes real tools — daily nudges, meeting prep, voice memos, cross-source synthesis — into one calm surface.
 
 Built for [Design, Build, Ship (MPCS 51238)](https://mpcs-courses.cs.uchicago.edu/) at UChicago.
 
-## v1 status (Week 6)
+**Live:** https://orbit-drab-phi.vercel.app — **Current build:** v3.9 (Week 8)
 
-The current build proves the core ingest loop end-to-end:
+---
 
-- Sign in with Clerk
-- Connect a Google account (separate OAuth flow scoped to Gmail metadata + Calendar read)
-- Pull the last 30 days of Gmail metadata
-- See an auto-built contact list ordered by recency, with per-contact detail pages
+## What's actually here
 
-AI summaries, reading list, morning briefing, and voice-memo ingestion arrive in v2–v4. See `AGENTS.md` for architecture details and the project proposal in the class repo for the full roadmap.
+**v1 → v2 → v3** spans the project arc. The v3 branch (v3.1 → v3.9) is the active daily-driver:
+
+| Surface           | What it does                                                                                  |
+|-------------------|-----------------------------------------------------------------------------------------------|
+| **Today**         | A daily card list — drifting contacts, upcoming meetings, birthdays, scheduled follow-ups.    |
+| **⌘K Quick Capture** | One keystroke from anywhere to log against the right contact.                              |
+| **Voice memos**   | Record audio in the browser, transcribed by Claude, attached to the contact card.             |
+| **Synth**         | Two-pass cross-source synthesis of newsletters + RSS into themed cards with citations.        |
+| **Auto-enrich**   | Drop a CSV; Claude batches 30 contacts/call with prompt caching, fires-and-forgets.           |
+| **Smart Lists**   | Saved filter sets with optional pipeline stages.                                              |
+| **Network view**  | Industry → company → person pivot across your contacts.                                       |
+| **Reads**         | RSS + TLDR feeds, bulk paste import, Jina-fetched titles.                                     |
+| **Meeting briefs**| Per-event one-pager: last conversation + recent threads → talking points.                     |
+| **Ask Orbit**     | Natural-language search with Claude tool calls (search_contacts, get_contact_details, stats). |
+
+## Stack
+
+Next.js 16 (App Router, Turbopack) · React 19 · TypeScript · Tailwind v4 · Clerk · Supabase (service-role server-side only, RLS on every table) · `googleapis` · Anthropic Claude Sonnet 4.6 · Playwright · Vercel
+
+## Architecture in one screen
+
+- **Auth:** Clerk via `src/proxy.ts` (Next 16 renamed `middleware` → `proxy`). Protects `/app/*` and `/api/*` except `/api/google/callback`.
+- **DB:** Supabase Postgres, service role only from server code. RLS enabled everywhere with no permissive policies (defense in depth).
+- **Mailbox layer:** Provider-agnostic adapter in `src/lib/mailbox/` — Gmail today, Outlook is one file away.
+- **OAuth:** Independent server-side flow at `/api/google/connect` → `/api/google/callback`. Refresh tokens AES-256-GCM encrypted at rest via `src/lib/crypto.ts`.
+- **Migrations:** Hand-rolled runner with its own tracking table (`_orbit_migrations`); run with `npm run migrate`.
+- **AI cache:** `briefings` table is a generic cache, multiple `kind` values (today, meeting, synth_daily, synth_weekly) share one TTL pattern.
+- **AI calls:** Server-only via `@anthropic-ai/sdk`. Sonnet 4.6 with prompt caching on rubric/system blocks. Tool loops capped at 5 iterations.
+- **Storage:** Voice memo audio in a private Supabase Storage bucket; transcripts in `interactions.body`.
+
+See [AGENTS.md](./AGENTS.md) for the deeper architectural notes and [SECURITY.md](./SECURITY.md) for the v3 threat model.
 
 ## Setup
 
@@ -21,22 +48,52 @@ AI summaries, reading list, morning briefing, and voice-memo ingestion arrive in
 npm install
 cp .env.local.example .env.local
 # fill in keys, then:
+npm run migrate     # apply pending Supabase migrations
 npm run dev
 ```
 
 You'll need:
 
 1. **Clerk** account → create app, paste publishable + secret keys.
-2. **Supabase** project → run `supabase/migrations/*.sql` against your DB (e.g. via the SQL editor), paste URL + publishable + service-role keys.
+2. **Supabase** project → either run `npm run migrate` (preferred, tracks state in `_orbit_migrations`) or paste `supabase/migrations/*.sql` into the SQL editor.
 3. **Google Cloud** project → enable Gmail API + Calendar API, create OAuth 2.0 client (Web), set redirect URI to `http://localhost:3000/api/google/callback`, configure consent screen as External / Testing, paste client ID + secret.
 4. A 32-byte hex token-encryption key:
    ```bash
    node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
    ```
+5. **Anthropic API key** for the AI features (Today, Synth, summaries, meeting briefs, Ask Orbit, voice transcription).
 
-## Stack
+## Scripts
 
-Next.js 16 (App Router) · TypeScript · Tailwind v4 · Clerk · Supabase · `googleapis` · Vercel
+```bash
+npm run dev          # next dev (Turbopack)
+npm run build        # next build
+npm run lint         # eslint
+npm run migrate      # apply pending supabase migrations
+npm run migrate:dry  # show which migrations would run
+npm run seed:pubs    # seed the 15-publication RSS starter pack
+npm run test:e2e     # Playwright smoke tests (Today, Synth, CSV import)
+```
+
+## Testing
+
+Three Playwright smoke tests covering the highest-value surfaces (Today render, Synth refresh, CSV contact import):
+
+```bash
+npx playwright install --with-deps   # first time only
+npm run test:e2e
+```
+
+The suite runs against the local dev server with a Clerk test token bypass for unauthenticated bootstrapping. See `playwright.config.ts` and `tests/e2e/`.
+
+## Security
+
+- Service-role Supabase access is server-only. The publishable key is never used client-side for DB writes.
+- Refresh tokens are AES-256-GCM encrypted with a 12-byte IV and authenticated tag.
+- All `/api/*` routes (except `/api/google/callback`) are gated by Clerk and scoped by `clerk_user_id` server-side.
+- OAuth callback validates `state === userId` for CSRF.
+- Mutation endpoints have per-route size + content caps; AI endpoints have iteration caps; voice uploads are size-, MIME-, and duration-capped.
+- See [SECURITY.md](./SECURITY.md) for the full threat model and v3 audit notes.
 
 ## License
 

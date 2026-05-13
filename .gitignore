@@ -48,3 +48,8 @@ next-env.d.ts
 # claude code local settings
 /.claude/
 /.vercel/
+
+# playwright
+/test-results/
+/playwright-report/
+/playwright/.cache/

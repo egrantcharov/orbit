@@ -434,6 +434,9 @@ export type Database = {
           source_id: string | null;
           source_url: string | null;
           created_at: string;
+          audio_path: string | null;
+          audio_duration_ms: number | null;
+          audio_mime: string | null;
         };
         Insert: {
           id?: string;
@@ -445,6 +448,9 @@ export type Database = {
           body?: string | null;
           source_id?: string | null;
           source_url?: string | null;
+          audio_path?: string | null;
+          audio_duration_ms?: number | null;
+          audio_mime?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["interactions"]["Insert"]>;
         Relationships: [];
