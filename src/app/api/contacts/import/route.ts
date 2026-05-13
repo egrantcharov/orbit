@@ -12,6 +12,17 @@ import { checkRateLimit } from "@/lib/security/rateLimit";
 const IMPORT_BODY_MAX = 4 * 1024 * 1024; // 4 MB — 5000 rows of slim JSON
 const IMPORT_LIMIT_PER_HOUR = 10;
 
+function hintFor(msg: string | null | undefined): string | null {
+  if (!msg) return null;
+  if (/paused|fetch failed|ECONNREFUSED|ENOTFOUND|database not reachable/i.test(msg)) {
+    return "Supabase project may be paused. Open the dashboard and restore it.";
+  }
+  if (/column .* does not exist/i.test(msg)) {
+    return "Schema drift — run `npm run migrate` against prod.";
+  }
+  return null;
+}
+
 type ContactInsert = Database["public"]["Tables"]["contacts"]["Insert"];
 
 export type ImportRow = {
@@ -262,8 +273,24 @@ export async function POST(req: NextRequest) {
       const slice = inserts.slice(i, i + 200);
       const { error: insErr } = await supabase.from("contacts").insert(slice);
       if (insErr) {
-        console.error("import insert failed", { userId, code: insErr.code });
-        return NextResponse.json({ error: "db_error" }, { status: 500 });
+        console.error("import insert failed", {
+          userId,
+          code: insErr.code,
+          message: insErr.message,
+          details: insErr.details,
+        });
+        // Surface the Supabase error message so the client toast points at
+        // the real cause (project paused, RLS, missing column, etc.)
+        // instead of "db_error".
+        return NextResponse.json(
+          {
+            error: "db_error",
+            code: insErr.code ?? null,
+            message: insErr.message ?? null,
+            hint: hintFor(insErr.message),
+          },
+          { status: 500 },
+        );
       }
     }
   }

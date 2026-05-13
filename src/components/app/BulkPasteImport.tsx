@@ -147,8 +147,19 @@ export function BulkPasteImport() {
           body: JSON.stringify({ rows: slice }),
         });
         if (!res.ok) {
-          const j = (await res.json().catch(() => ({}))) as { error?: string };
-          throw new Error(`Import failed: ${j.error ?? `HTTP ${res.status}`}`);
+          const j = (await res.json().catch(() => ({}))) as {
+            error?: string;
+            code?: string;
+            message?: string;
+            hint?: string;
+          };
+          const detail =
+            j.hint ??
+            j.message ??
+            (j.error
+              ? `${j.error}${j.code ? ` (${j.code})` : ""}`
+              : `HTTP ${res.status}`);
+          throw new Error(`Import failed: ${detail}`);
         }
         const j = (await res.json()) as {
           created?: number;

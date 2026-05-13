@@ -185,11 +185,19 @@ export default function ImportPage() {
           body: JSON.stringify({ rows: slice }),
         });
         if (!res.ok) {
-          const body = (await res.json().catch(() => ({}))) as { error?: string };
-          const msg = body.error
-            ? `Import failed: ${body.error} (HTTP ${res.status})`
-            : `Import failed (HTTP ${res.status})`;
-          throw new Error(msg);
+          const body = (await res.json().catch(() => ({}))) as {
+            error?: string;
+            code?: string;
+            message?: string;
+            hint?: string;
+          };
+          const detail =
+            body.hint ??
+            body.message ??
+            (body.error
+              ? `${body.error}${body.code ? ` (${body.code})` : ""}`
+              : `HTTP ${res.status}`);
+          throw new Error(`Import failed: ${detail}`);
         }
         const j = (await res.json()) as { created?: number; enriched?: number; skipped?: number };
         created += j.created ?? 0;
