@@ -83,6 +83,20 @@ CSP is **deliberately not** in place yet. Clerk + Supabase realtime + Sonner tog
 - Server logs include `userId` and Supabase error `code` only — never refresh tokens, access tokens, OAuth codes, message bodies, or transcript text.
 - `console.error` lines are reviewed periodically; if any new logger ships, it inherits this contract.
 
+## MCP server (v3.14)
+
+`/api/mcp` exposes a Model Context Protocol server so external clients (Claude Desktop, Cursor, the Anthropic API itself, a user's own scripts) can use Orbit as a tool surface. The auth, scoping, and rate-limit contract:
+
+- **Transport** — Streamable HTTP, JSON-RPC 2.0 over `POST /api/mcp`. The route is exempt from Clerk's session check (it uses bearer auth) but every dispatch validates the bearer against `mcp_tokens` before any tool runs.
+- **OAuth 2.1 + Dynamic Client Registration** — clients register at `POST /api/mcp/oauth/register` (requires a Clerk session), walk the user through a consent screen at `/app/settings/mcp/consent`, exchange a PKCE-protected auth code at `POST /api/mcp/oauth/token` for a 1-hour access token + 30-day refresh token. PKCE S256 required.
+- **Tokens** — random 32-byte b64url strings prefixed `orbit_at_…` / `orbit_rt_…` / `orbit_pat_…`. Database stores `sha256(token)` only. Refresh tokens additionally store the raw value AES-256-GCM encrypted via `src/lib/crypto.ts` (same pattern as Google refresh tokens) so revocation can target specific tokens.
+- **Scopes** — `contacts:read`, `contacts:write`, `interactions:read`, `interactions:write`, `voice:read`, `voice:write`, `briefings:read`, `ai:invoke`, `*` (admin). Defined in `src/lib/mcp/scopes.ts`. Every tool handler calls `requireScope(ctx.scopes, needed)` — the discovery list is never trusted alone.
+- **Audit log** — every tool/prompt/resource call inserts a row into `mcp_audit_log` (user, client, method, name, ok, status, duration). Surfaced on `/app/settings/mcp` for the user.
+- **Rate limits** — global per-user `mcp:${userId}` at 600 calls/minute. Per-IP registration cap at 20/hour. Per-user max 50 active clients.
+- **Revocation** — `POST /api/mcp/oauth/revoke` (RFC 7009, always 200), plus `DELETE /api/mcp/clients/[clientId]` (UI path, requires Clerk session) which revokes both the client and every token under it.
+- **CSRF** — the OAuth consent step uses an HttpOnly + SameSite=Lax cookie that carries the request parameters; the consent submit is gated by a Clerk session check on top of that.
+- **Public endpoints** — `/.well-known/oauth-authorization-server` is public per the OAuth metadata spec. The discovery doc only describes the auth + token URLs; it cannot be used to enumerate user data.
+
 ## Known gaps (Week-9 follow-ups)
 
 1. **CSP** — see above.

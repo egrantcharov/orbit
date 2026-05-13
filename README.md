@@ -4,7 +4,7 @@ A personal operating system for your relationships and knowledge. Orbit auto-ing
 
 Built for [Design, Build, Ship (MPCS 51238)](https://mpcs-courses.cs.uchicago.edu/) at UChicago.
 
-**Live:** https://orbit-drab-phi.vercel.app — **Current build:** v3.13 (Week 8)
+**Live:** https://orbit-drab-phi.vercel.app — **Current build:** v3.14 (Week 8)
 
 ---
 
@@ -18,6 +18,7 @@ Built for [Design, Build, Ship (MPCS 51238)](https://mpcs-courses.cs.uchicago.ed
 | **⌘K Quick Capture** | One keystroke from anywhere to log against the right contact.                              |
 | **Voice memos**   | Record audio in the browser, Claude turns the transcript into a title + summary + action items, all attached to the contact card. |
 | **Conversation history** | Unified, paginated, searchable feed of email threads + interactions + voice memos, with filter chips (Email / Calls / Voice / Notes). |
+| **MCP server** | Connect Claude Desktop, Cursor, or any MCP-aware client. OAuth 2.1 + PKCE handshake, scoped tokens, 6 tools shipped (search_contacts, get_contact_details, get_today_cards, list_interactions, get_action_items, log_interaction). See `/app/settings/mcp`. |
 | **Synth**         | Two-pass cross-source synthesis of newsletters + RSS into themed cards with citations.        |
 | **Auto-enrich**   | Drop a CSV; Claude batches 30 contacts/call with prompt caching, fires-and-forgets.           |
 | **Smart Lists**   | Saved filter sets with optional pipeline stages.                                              |

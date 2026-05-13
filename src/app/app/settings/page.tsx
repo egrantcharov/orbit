@@ -33,12 +33,20 @@ export default async function SettingsPage() {
 
       <SelfProfileForm initial={profile} />
 
-      <a
-        href="/app/settings/mailboxes"
-        className="text-sm text-primary hover:underline"
-      >
-        Manage connected mailboxes →
-      </a>
+      <div className="flex flex-col gap-2">
+        <a
+          href="/app/settings/mailboxes"
+          className="text-sm text-primary hover:underline"
+        >
+          Manage connected mailboxes →
+        </a>
+        <a
+          href="/app/settings/mcp"
+          className="text-sm text-primary hover:underline"
+        >
+          MCP server — connect Claude Desktop / Cursor / external models →
+        </a>
+      </div>
 
       <DataControls />
     </main>

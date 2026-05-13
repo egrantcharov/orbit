@@ -609,6 +609,112 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["digests"]["Insert"]>;
         Relationships: [];
       };
+      mcp_clients: {
+        Row: {
+          id: string;
+          clerk_user_id: string;
+          client_id: string;
+          client_secret_hash: string;
+          client_name: string;
+          redirect_uris: string[];
+          scopes_granted: string[];
+          created_at: string;
+          last_used_at: string | null;
+          revoked_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          clerk_user_id: string;
+          client_id: string;
+          client_secret_hash: string;
+          client_name: string;
+          redirect_uris?: string[];
+          scopes_granted?: string[];
+          created_at?: string;
+          last_used_at?: string | null;
+          revoked_at?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["mcp_clients"]["Insert"]>;
+        Relationships: [];
+      };
+      mcp_tokens: {
+        Row: {
+          id: string;
+          client_id: string;
+          clerk_user_id: string;
+          token_hash: string;
+          kind: "access" | "refresh" | "pat";
+          scopes: string[];
+          expires_at: string | null;
+          refresh_token_encrypted: string | null;
+          created_at: string;
+          revoked_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          client_id: string;
+          clerk_user_id: string;
+          token_hash: string;
+          kind: "access" | "refresh" | "pat";
+          scopes: string[];
+          expires_at?: string | null;
+          refresh_token_encrypted?: string | null;
+          created_at?: string;
+          revoked_at?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["mcp_tokens"]["Insert"]>;
+        Relationships: [];
+      };
+      mcp_auth_codes: {
+        Row: {
+          code: string;
+          client_id: string;
+          clerk_user_id: string;
+          redirect_uri: string;
+          scopes: string[];
+          pkce_challenge: string;
+          expires_at: string;
+          used_at: string | null;
+        };
+        Insert: {
+          code: string;
+          client_id: string;
+          clerk_user_id: string;
+          redirect_uri: string;
+          scopes: string[];
+          pkce_challenge: string;
+          expires_at: string;
+          used_at?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["mcp_auth_codes"]["Insert"]>;
+        Relationships: [];
+      };
+      mcp_audit_log: {
+        Row: {
+          id: string;
+          clerk_user_id: string;
+          client_id: string | null;
+          method: string;
+          name: string;
+          ok: boolean;
+          status_code: number | null;
+          duration_ms: number | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          clerk_user_id: string;
+          client_id?: string | null;
+          method: string;
+          name: string;
+          ok: boolean;
+          status_code?: number | null;
+          duration_ms?: number | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["mcp_audit_log"]["Insert"]>;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

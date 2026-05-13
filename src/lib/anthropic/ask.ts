@@ -164,7 +164,9 @@ function birthdayWindowMatches(birthday: string | null, days: number): boolean {
   return false;
 }
 
-async function runTool(
+// Exported so the MCP server can reuse the exact same query logic Ask Orbit
+// runs, instead of duplicating the contact filter graph.
+export async function runTool(
   name: string,
   rawInput: unknown,
   userId: string,
