@@ -78,14 +78,20 @@ npm run test:e2e     # Playwright smoke tests (Today, Synth, CSV import)
 
 ## Testing
 
-Three Playwright smoke tests covering the highest-value surfaces (Today render, Synth refresh, CSV contact import):
+Playwright smoke tests covering the highest-value surfaces (landing render, auth gates, Synth, CSV import):
 
 ```bash
 npx playwright install --with-deps   # first time only
-npm run test:e2e
+npm run test:e2e                     # runs against local `npm run dev`
 ```
 
-The suite runs against the local dev server with a Clerk test token bypass for unauthenticated bootstrapping. See `playwright.config.ts` and `tests/e2e/`.
+To smoke against the live production URL after a deploy (no dev server needed):
+
+```bash
+PLAYWRIGHT_BASE_URL=https://orbit-drab-phi.vercel.app npm run test:e2e
+```
+
+The CI workflow (`.github/workflows/ci.yml`) gates only lint + tsc — the e2e suite needs a real Clerk publishable key on dev-server startup, so it lives in the local + post-deploy paths instead.
 
 ## Security
 
