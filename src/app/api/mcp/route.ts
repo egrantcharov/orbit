@@ -87,6 +87,10 @@ async function dispatch(req: Request): Promise<Response> {
     {
       maxDuration: 60,
       verboseLogs: false,
+      // Stateless request/response. We don't have Redis provisioned and
+      // the P0 tools don't need server-pushed notifications. SSE comes
+      // back when we ship resource subscriptions in P2.
+      disableSse: true,
     },
   );
   return perRequestHandler(req);

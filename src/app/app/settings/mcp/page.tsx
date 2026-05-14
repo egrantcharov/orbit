@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { ClientList } from "@/components/app/mcp/ClientList";
 import { ConnectInstructions } from "@/components/app/mcp/ConnectInstructions";
+import { PatGenerator } from "@/components/app/mcp/PatGenerator";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +37,8 @@ export default async function McpSettingsPage() {
       </header>
 
       <ConnectInstructions />
+
+      <PatGenerator />
 
       <ClientList
         clients={clients ?? []}

@@ -10,7 +10,8 @@
     "migrate": "tsx scripts/migrate.ts",
     "migrate:dry": "tsx scripts/migrate.ts --dry",
     "seed:pubs": "tsx scripts/seed-publications.ts",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "smoke:mcp": "tsx scripts/mcp-smoke.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.91.1",
